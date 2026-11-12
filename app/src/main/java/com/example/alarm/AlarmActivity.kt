@@ -170,6 +170,9 @@ fun AlarmScreen(
     val coroutineScope = rememberCoroutineScope()
     val isSpeaking by app.ttsManager.isSpeaking.collectAsState()
 
+    var userProfileState by remember { mutableStateOf<com.example.data.model.UserProfile?>(null) }
+    var isRealisticAudioPlaying by remember { mutableStateOf(false) }
+
     // Real loud alarm starts ringing immediately with strong vibration. NO speech while ringing!
     DisposableEffect(Unit) {
         app.soundManager.startAlarmRingtone()
@@ -177,6 +180,7 @@ fun AlarmScreen(
 
         onDispose {
             app.soundManager.stopAlarmRingtone()
+            app.soundManager.stopAudioPlayback()
             app.vibrationHelper.stopVibration()
             app.ttsManager.stop()
         }
@@ -186,6 +190,7 @@ fun AlarmScreen(
         val todayStr = app.repository.getTodayString()
         todayTasks = app.repository.getTasksForDateSync(todayStr)
         val profile = app.database.userProfileDao().getUserProfile()
+        userProfileState = profile
         if (profile != null) {
             userName = profile.userName
             todayQuestion = profile.morningWinQuestion
@@ -303,14 +308,32 @@ fun AlarmScreen(
                             confettiTrigger = System.currentTimeMillis()
 
                             // 2. NOW start spoken briefing on ALARM stream at full volume
-                            quoteOfTheDay?.let { q ->
-                                app.ttsManager.speakMorningBriefing(
-                                    userName = userName,
-                                    quoteText = q.text,
-                                    quoteAuthor = q.author,
-                                    todayQuestion = todayQuestion,
-                                    tasks = todayTasks.map { it.title }
-                                )
+                            val morningAudioFile = app.geminiTtsService.getMorningAudioFile()
+                            val shouldPlayRealistic = userProfileState?.useRealisticVoice == true &&
+                                    morningAudioFile.exists() && morningAudioFile.length() > 0
+
+                            var played = false
+                            if (shouldPlayRealistic) {
+                                isRealisticAudioPlaying = true
+                                played = app.soundManager.playAudioFile(morningAudioFile) {
+                                    isRealisticAudioPlaying = false
+                                }
+                                if (!played) {
+                                    isRealisticAudioPlaying = false
+                                }
+                            }
+
+                            // If no realistic audio or playback failed, fall back to phone's built-in text-to-speech
+                            if (!played) {
+                                quoteOfTheDay?.let { q ->
+                                    app.ttsManager.speakMorningBriefing(
+                                        userName = userName,
+                                        quoteText = q.text,
+                                        quoteAuthor = q.author,
+                                        todayQuestion = todayQuestion,
+                                        tasks = todayTasks.map { it.title }
+                                    )
+                                }
                             }
                         },
                         colors = ButtonDefaults.buttonColors(
@@ -395,20 +418,40 @@ fun AlarmScreen(
                                 )
                             }
 
-                            // TTS voice replay
+                            val anyAudioPlaying = isSpeaking || isRealisticAudioPlaying || app.soundManager.isPlayingAudioFile()
+                            // TTS / Realistic voice replay
                             IconButton(
                                 onClick = {
-                                    if (isSpeaking) {
+                                    if (anyAudioPlaying) {
+                                        app.soundManager.stopAudioPlayback()
                                         app.ttsManager.stop()
+                                        isRealisticAudioPlaying = false
                                     } else {
-                                        quoteOfTheDay?.let { q ->
-                                            app.ttsManager.speakMorningBriefing(
-                                                userName = userName,
-                                                quoteText = q.text,
-                                                quoteAuthor = q.author,
-                                                todayQuestion = todayQuestion,
-                                                tasks = todayTasks.map { it.title }
-                                            )
+                                        val morningAudioFile = app.geminiTtsService.getMorningAudioFile()
+                                        val shouldPlayRealistic = userProfileState?.useRealisticVoice == true &&
+                                                morningAudioFile.exists() && morningAudioFile.length() > 0
+
+                                        var played = false
+                                        if (shouldPlayRealistic) {
+                                            isRealisticAudioPlaying = true
+                                            played = app.soundManager.playAudioFile(morningAudioFile) {
+                                                isRealisticAudioPlaying = false
+                                            }
+                                            if (!played) {
+                                                isRealisticAudioPlaying = false
+                                            }
+                                        }
+
+                                        if (!played) {
+                                            quoteOfTheDay?.let { q ->
+                                                app.ttsManager.speakMorningBriefing(
+                                                    userName = userName,
+                                                    quoteText = q.text,
+                                                    quoteAuthor = q.author,
+                                                    todayQuestion = todayQuestion,
+                                                    tasks = todayTasks.map { it.title }
+                                                )
+                                            }
                                         }
                                     }
                                 },
@@ -418,9 +461,9 @@ fun AlarmScreen(
                                     .testTag("tts_toggle_button")
                             ) {
                                 Icon(
-                                    imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+                                    imageVector = if (anyAudioPlaying) Icons.Default.Stop else Icons.Default.VolumeUp,
                                     contentDescription = "Voice Briefing",
-                                    tint = if (isSpeaking) FlameOrange else GoldPrimary
+                                    tint = if (anyAudioPlaying) FlameOrange else GoldPrimary
                                 )
                             }
                         }
@@ -635,6 +678,7 @@ fun AlarmScreen(
                     ) {
                         Button(
                             onClick = {
+                                app.soundManager.stopAudioPlayback()
                                 app.ttsManager.stop()
                                 onDismissToApp()
                             },

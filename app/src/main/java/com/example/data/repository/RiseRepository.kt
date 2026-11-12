@@ -36,6 +36,12 @@ class RiseRepository(private val db: RiseDatabase) {
     fun getTodayString(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
+    fun getTomorrowString(): String {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, 1)
+        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+    }
+
     fun getCurrentWeekId(): String {
         val cal = Calendar.getInstance()
         return "${cal.get(Calendar.YEAR)}-W${cal.get(Calendar.WEEK_OF_YEAR)}"
@@ -385,6 +391,15 @@ class RiseRepository(private val db: RiseDatabase) {
         }
         db.quoteDao().markQuoteAsUsed(quote.id)
         return quote
+    }
+
+    suspend fun peekOrGetQuoteForBriefing(): Quote {
+        return db.quoteDao().getNextUnusedQuote() ?: Quote(
+            text = "Commit your work to the Lord, and your plans will be established.",
+            author = "Proverbs 16:3",
+            category = "Scripture",
+            isBibleVerse = true
+        )
     }
 
     // Weekly Chart Data structures

@@ -99,6 +99,10 @@ data class UserProfile(
     val speechVoiceName: String = "",
     val morningWinQuestion: String = "What is the one thing that would make today a win?",
     val morningWinAnswer: String = "",
+    val useRealisticVoice: Boolean = false,
+    val geminiVoiceName: String = "Charon",
+    val geminiVoiceStyle: String = "Warm, deep, unhurried storyteller. Speaks like a wise, encouraging mentor, with natural pauses and a slight smile in the voice.",
+    val lastMorningAudioGeneratedForDate: String = "",
     val totalTasksCompleted: Int = 0,
     val perfectDaysCount: Int = 0,
     val perfectWeeksCount: Int = 0

@@ -10,7 +10,69 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
+data class FriendlyVoice(
+    val voiceName: String,
+    val displayName: String,
+    val isEnglish: Boolean,
+    val locale: Locale
+)
+
 class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
+
+    companion object {
+        const val DEFAULT_SPEED = 0.95f
+        const val DEFAULT_PITCH = 0.85f // Deep, clear adult voice default
+
+        fun buildMorningScript(
+            userName: String,
+            quoteText: String,
+            quoteAuthor: String,
+            todayQuestion: String,
+            tasks: List<String>
+        ): String {
+            val sb = StringBuilder()
+            sb.append("Good morning $userName. Rise and shine. ")
+            sb.append("Here is your quote of the day. \"$quoteText\" by $quoteAuthor. ")
+
+            if (todayQuestion.isNotBlank()) {
+                sb.append("Today's focus question: $todayQuestion. ")
+            }
+
+            if (tasks.isEmpty()) {
+                sb.append("You have no tasks scheduled yet. Open Rise to set your targets for today.")
+            } else {
+                val countWord = if (tasks.size == 1) "task" else "tasks"
+                sb.append("Today you have ${tasks.size} $countWord on your battle plan. ")
+                val ordinals = listOf("First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth")
+                tasks.take(5).forEachIndexed { index, taskTitle ->
+                    val ordinal = ordinals.getOrElse(index) { "Next" }
+                    sb.append("$ordinal, $taskTitle. ")
+                }
+                sb.append("Make today count!")
+            }
+            return sb.toString()
+        }
+
+        fun buildEveningScript(
+            userName: String,
+            completedCount: Int,
+            totalCount: Int,
+            xpEarned: Int,
+            streakDays: Int
+        ): String {
+            val sb = StringBuilder()
+            sb.append("Good evening $userName. ")
+            if (completedCount == totalCount && totalCount > 0) {
+                sb.append("Incredible work! You achieved a perfect score today, completing all $totalCount of your goals, and earning $xpEarned XP. ")
+            } else if (completedCount > 0) {
+                sb.append("Great effort today! You conquered $completedCount out of $totalCount goals, earning $xpEarned XP. ")
+            } else {
+                sb.append("Every day is a stepping stone. Tomorrow is another chance to rise and win. ")
+            }
+            sb.append("Your winning streak is $streakDays days. Rest well, champion.")
+            return sb.toString()
+        }
+    }
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
@@ -21,8 +83,11 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
     private val _availableVoices = MutableStateFlow<List<Voice>>(emptyList())
     val availableVoices: StateFlow<List<Voice>> = _availableVoices.asStateFlow()
 
-    private var currentSpeed: Float = 0.95f
-    private var currentPitch: Float = 0.85f // Deep, resonant adult pitch default
+    private val _friendlyVoices = MutableStateFlow<List<FriendlyVoice>>(emptyList())
+    val friendlyVoices: StateFlow<List<FriendlyVoice>> = _friendlyVoices.asStateFlow()
+
+    private var currentSpeed: Float = DEFAULT_SPEED
+    private var currentPitch: Float = DEFAULT_PITCH
     private var currentVoiceName: String? = null
 
     init {
@@ -46,11 +111,19 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
                     engine.setSpeechRate(currentSpeed)
                     engine.setPitch(currentPitch)
 
-                    // Load available voices
+                    // Load available voices and build friendly labels
                     try {
                         val voices = engine.voices
                         if (voices != null) {
-                            _availableVoices.value = voices.toList().sortedBy { it.name }
+                            val sortedVoices = voices.toList().sortedWith(
+                                compareBy(
+                                    { it.locale.language != "en" }, // English first
+                                    { it.locale.country },
+                                    { it.name }
+                                )
+                            )
+                            _availableVoices.value = sortedVoices
+                            _friendlyVoices.value = generateFriendlyVoiceList(sortedVoices)
                         }
                     } catch (ignored: Exception) {}
 
@@ -81,6 +154,56 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
+    private fun generateFriendlyVoiceList(voices: List<Voice>): List<FriendlyVoice> {
+        val countMap = mutableMapOf<String, Int>()
+        val result = mutableListOf<FriendlyVoice>()
+
+        for (v in voices) {
+            val isEnglish = v.locale.language.equals("en", ignoreCase = true)
+            val countryPrefix = when (v.locale.country.uppercase(Locale.ROOT)) {
+                "US" -> "US"
+                "GB", "UK" -> "British"
+                "AU" -> "Australian"
+                "CA" -> "Canadian"
+                "IN" -> "Indian"
+                "IE" -> "Irish"
+                "NG" -> "Nigerian"
+                "ZA" -> "South African"
+                "NZ" -> "New Zealand"
+                else -> {
+                    if (isEnglish) {
+                        v.locale.displayCountry.ifBlank { "English" }
+                    } else {
+                        v.locale.displayLanguage.ifBlank { "World" }
+                    }
+                }
+            }
+
+            val nameLower = v.name.lowercase(Locale.ROOT)
+            val gender = when {
+                nameLower.contains("fem") || nameLower.contains("woman") || nameLower.contains("girl") -> "Female"
+                nameLower.contains("male") || nameLower.contains("man") || nameLower.contains("boy") -> "Male"
+                else -> "Voice"
+            }
+
+            val key = "$countryPrefix $gender"
+            val index = (countMap[key] ?: 0) + 1
+            countMap[key] = index
+
+            val friendlyName = "$countryPrefix $gender $index"
+            result.add(
+                FriendlyVoice(
+                    voiceName = v.name,
+                    displayName = friendlyName,
+                    isEnglish = isEnglish,
+                    locale = v.locale
+                )
+            )
+        }
+
+        return result
+    }
+
     fun applyVoiceSettings(speed: Float, pitch: Float, voiceName: String?) {
         currentSpeed = speed
         currentPitch = pitch
@@ -94,6 +217,23 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
                 if (matched != null) {
                     engine.voice = matched
                 }
+            }
+        }
+    }
+
+    fun resetToDefaultVoice() {
+        currentSpeed = DEFAULT_SPEED
+        currentPitch = DEFAULT_PITCH
+        currentVoiceName = null
+
+        tts?.let { engine ->
+            engine.setSpeechRate(DEFAULT_SPEED)
+            engine.setPitch(DEFAULT_PITCH)
+            engine.language = Locale.US
+            // Pick default voice
+            val defaultVoice = engine.defaultVoice
+            if (defaultVoice != null) {
+                engine.voice = defaultVoice
             }
         }
     }
@@ -126,28 +266,8 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
         todayQuestion: String,
         tasks: List<String>
     ) {
-        val sb = StringBuilder()
-        sb.append("Good morning $userName. Rise and shine. ")
-        sb.append("Here is your quote of the day. \"$quoteText\" by $quoteAuthor. ")
-
-        if (todayQuestion.isNotBlank()) {
-            sb.append("Today's focus question: $todayQuestion. ")
-        }
-
-        if (tasks.isEmpty()) {
-            sb.append("You have no tasks scheduled yet. Open Rise to set your targets.")
-        } else {
-            val countWord = if (tasks.size == 1) "task" else "tasks"
-            sb.append("Today you have ${tasks.size} $countWord on your battle plan. ")
-            val ordinals = listOf("First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth")
-            tasks.take(5).forEachIndexed { index, taskTitle ->
-                val ordinal = ordinals.getOrElse(index) { "Next" }
-                sb.append("$ordinal, $taskTitle. ")
-            }
-            sb.append("Make today count!")
-        }
-
-        speak(sb.toString())
+        val script = buildMorningScript(userName, quoteText, quoteAuthor, todayQuestion, tasks)
+        speak(script)
     }
 
     fun speakEveningReflection(
@@ -157,17 +277,8 @@ class TtsManager(private val context: Context) : TextToSpeech.OnInitListener {
         xpEarned: Int,
         streakDays: Int
     ) {
-        val sb = StringBuilder()
-        sb.append("Good evening $userName. ")
-        if (completedCount == totalCount && totalCount > 0) {
-            sb.append("Incredible work! You achieved a perfect score today, completing all $totalCount of your goals, and earning $xpEarned XP. ")
-        } else if (completedCount > 0) {
-            sb.append("Great effort today! You conquered $completedCount out of $totalCount goals, earning $xpEarned XP. ")
-        } else {
-            sb.append("Every day is a stepping stone. Tomorrow is another chance to rise and win. ")
-        }
-        sb.append("Your winning streak is $streakDays days. Rest well, champion.")
-        speak(sb.toString())
+        val script = buildEveningScript(userName, completedCount, totalCount, xpEarned, streakDays)
+        speak(script)
     }
 
     fun stop() {

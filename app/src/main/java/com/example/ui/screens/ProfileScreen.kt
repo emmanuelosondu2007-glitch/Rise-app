@@ -34,15 +34,24 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -69,9 +78,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.audio.GeminiTtsService
 import com.example.data.model.BadgeItem
 import com.example.data.model.CategoryItem
 import com.example.ui.RiseViewModel
@@ -79,6 +91,7 @@ import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.GoldBright
+import com.example.ui.theme.GoldMuted
 import com.example.ui.theme.GoldPrimary
 import com.example.ui.theme.GoldSecondary
 import com.example.ui.theme.NavyBackground
@@ -102,10 +115,33 @@ fun ProfileScreen(
     val badges by viewModel.badges.collectAsState()
     val categories by viewModel.categories.collectAsState()
     val availableVoices by viewModel.ttsManager.availableVoices.collectAsState()
+    val friendlyVoices by viewModel.friendlyVoices.collectAsState()
+    val geminiAudioStatus by viewModel.geminiAudioStatus.collectAsState()
+    val isGeneratingGeminiAudio by viewModel.isGeneratingGeminiAudio.collectAsState()
+    val isGeminiPreviewPlaying by viewModel.geminiVoicePreviewPlaying.collectAsState()
 
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<CategoryItem?>(null) }
+
+    // Gemini Realistic Voice State
+    var useRealisticVoice by remember(userProfile?.useRealisticVoice) {
+        mutableStateOf(userProfile?.useRealisticVoice ?: false)
+    }
+    var geminiApiKeyInput by remember { mutableStateOf(viewModel.getGeminiApiKey()) }
+    var isApiKeyMasked by remember { mutableStateOf(true) }
+    var selectedGeminiVoice by remember(userProfile?.geminiVoiceName) {
+        mutableStateOf(userProfile?.geminiVoiceName ?: "Charon")
+    }
+    var geminiVoiceStyle by remember(userProfile?.geminiVoiceStyle) {
+        mutableStateOf(
+            userProfile?.geminiVoiceStyle
+                ?: "Warm, deep, unhurried storyteller. Speaks like a wise, encouraging mentor, with natural pauses and a slight smile in the voice."
+        )
+    }
+
+    // Phone TTS State
+    var showAllLanguages by remember { mutableStateOf(false) }
 
     val level = userProfile?.level ?: 1
     val currentXp = userProfile?.xp ?: 0
@@ -325,14 +361,419 @@ fun ProfileScreen(
                 }
             }
 
-            // 3. TEXT-TO-SPEECH VOICE PICKER & TUNING (REQUIREMENT 2)
+            // 3A. REALISTIC VOICE (GEMINI TTS) SECTION
             item {
-                Text(
-                    text = "Text-to-Speech Voice Studio 🎙️",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextWhite
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Realistic Voice (Gemini) 🤖✨",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Text(
+                            text = "Hyper-realistic neural voice for morning & evening",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GoldMuted
+                        )
+                    }
+
+                    Switch(
+                        checked = useRealisticVoice,
+                        onCheckedChange = { checked ->
+                            useRealisticVoice = checked
+                            viewModel.updateRealisticVoiceSettings(checked, selectedGeminiVoice, geminiVoiceStyle)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = NavyDarkest,
+                            checkedTrackColor = GoldPrimary,
+                            uncheckedThumbColor = TextMuted,
+                            uncheckedTrackColor = NavySurfaceElevated
+                        ),
+                        modifier = Modifier.testTag("realistic_voice_switch")
+                    )
+                }
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = NavySurface),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.5.dp,
+                        if (useRealisticVoice) GoldPrimary.copy(alpha = 0.6f) else NavySurfaceBorder
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        // Gemini API Key Input
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Key,
+                                    contentDescription = null,
+                                    tint = GoldPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Your Gemini API Key",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextWhite
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (viewModel.hasGeminiApiKey()) EmeraldSuccess.copy(alpha = 0.15f) else FlameOrange.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = if (viewModel.hasGeminiApiKey()) "Encrypted 🔒" else "Required ⚠️",
+                                    color = if (viewModel.hasGeminiApiKey()) EmeraldSuccess else FlameYellow,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Stored ONLY on this phone (AES-GCM encrypted in hardware Android KeyStore). Never hard-coded into public repo.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = geminiApiKeyInput,
+                            onValueChange = { geminiApiKeyInput = it },
+                            placeholder = { Text("Paste your Gemini API key (AIza...)", color = TextMuted, fontSize = 12.sp) },
+                            singleLine = true,
+                            visualTransformation = if (isApiKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
+                            trailingIcon = {
+                                IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }) {
+                                    Icon(
+                                        imageVector = if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = "Toggle visibility",
+                                        tint = TextSilver,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldPrimary,
+                                unfocusedBorderColor = NavySurfaceBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedContainerColor = NavySurfaceElevated,
+                                unfocusedContainerColor = NavySurfaceElevated
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("gemini_api_key_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.saveGeminiApiKey(geminiApiKeyInput)
+                                },
+                                enabled = geminiApiKeyInput.isNotBlank(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GoldPrimary,
+                                    contentColor = NavyDarkest
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .testTag("save_gemini_key_button")
+                            ) {
+                                Text("Save Key Securely", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+
+                            if (viewModel.hasGeminiApiKey()) {
+                                OutlinedButton(
+                                    onClick = {
+                                        geminiApiKeyInput = ""
+                                        viewModel.clearGeminiApiKey()
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameOrange),
+                                    modifier = Modifier.height(42.dp)
+                                ) {
+                                    Text("Clear", fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Gemini Voices Picker
+                        Text(
+                            text = "Choose Gemini Voice:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GeminiTtsService.PREBUILT_VOICES.forEach { voice ->
+                                val isSelected = selectedGeminiVoice == voice.name
+                                Surface(
+                                    onClick = {
+                                        selectedGeminiVoice = voice.name
+                                        viewModel.updateRealisticVoiceSettings(useRealisticVoice, voice.name, geminiVoiceStyle)
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) GoldPrimary.copy(alpha = 0.15f) else NavySurfaceElevated,
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (isSelected) GoldPrimary else NavySurfaceBorder
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RecordVoiceOver,
+                                                contentDescription = null,
+                                                tint = if (isSelected) GoldPrimary else TextMuted,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column {
+                                                Text(
+                                                    text = voice.label,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (isSelected) GoldBright else TextWhite
+                                                )
+                                                Text(
+                                                    text = voice.description,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSilver,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                viewModel.previewGeminiVoice(voice.name, geminiVoiceStyle)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isSelected) GoldPrimary else NavySurfaceHighlight,
+                                                contentColor = if (isSelected) NavyDarkest else TextWhite
+                                            ),
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier
+                                                .height(34.dp)
+                                                .testTag("preview_gemini_${voice.name}")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.VolumeUp,
+                                                contentDescription = "Preview",
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Voice Style Text Box
+                        Text(
+                            text = "Voice Style Prompt:",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Directs Gemini's tone, pacing, emotion and inflection.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = geminiVoiceStyle,
+                            onValueChange = {
+                                geminiVoiceStyle = it
+                                viewModel.updateRealisticVoiceSettings(useRealisticVoice, selectedGeminiVoice, it)
+                            },
+                            maxLines = 4,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldPrimary,
+                                unfocusedBorderColor = NavySurfaceBorder,
+                                focusedTextColor = TextWhite,
+                                unfocusedTextColor = TextWhite,
+                                focusedContainerColor = NavySurfaceElevated,
+                                unfocusedContainerColor = NavySurfaceElevated
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("gemini_voice_style_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Generate Night-Before Status & Manual Trigger
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = NavySurfaceElevated,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "Night-Before Audio Status:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FlameYellow
+                                    )
+
+                                    if (isGeneratingGeminiAudio) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            color = GoldPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = if (geminiAudioStatus.isNotBlank()) {
+                                        geminiAudioStatus
+                                    } else if (userProfile?.lastMorningAudioGeneratedForDate?.isNotEmpty() == true) {
+                                        "Audio ready for date: ${userProfile?.lastMorningAudioGeneratedForDate} ✅"
+                                    } else {
+                                        "Will generate tonight during evening check-in or when tasks are added."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSilver,
+                                    fontSize = 12.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Button(
+                                    onClick = { viewModel.generateTomorrowMorningAudio(force = true) },
+                                    enabled = useRealisticVoice && viewModel.hasGeminiApiKey() && !isGeneratingGeminiAudio,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = GoldPrimary,
+                                        contentColor = NavyDarkest
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(40.dp)
+                                        .testTag("generate_audio_now_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isGeneratingGeminiAudio) "Generating Audio..." else "Generate Tomorrow's Audio Now",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3B. PHONE TEXT-TO-SPEECH STUDIO (REQUIREMENT 5)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Phone Voice Studio 📱🎙️",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Text(
+                            text = "Built-in fallback voice and pitch engine",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.resetPhoneVoiceToDefault()
+                            speedSlider = com.example.audio.TtsManager.DEFAULT_SPEED
+                            pitchSlider = com.example.audio.TtsManager.DEFAULT_PITCH
+                            selectedVoiceName = ""
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .height(32.dp)
+                            .testTag("reset_default_voice_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RestartAlt,
+                            contentDescription = "Reset",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Reset Default", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             item {
@@ -343,7 +784,7 @@ fun ProfileScreen(
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
                         Text(
-                            text = "Speech Speed: ${String.format("%.2f", speedSlider)}x",
+                            text = "Speech Speed: ${String.format("%.2f", speedSlider)}x (Default: 0.95x)",
                             style = MaterialTheme.typography.labelMedium,
                             color = TextSilver
                         )
@@ -384,43 +825,78 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Voice Picker list
-                        Text(
-                            text = "Phone TTS Voices (${availableVoices.size} detected):",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
+                        // Friendly Voice Picker & Language Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Device Voices (${if (showAllLanguages) friendlyVoices.size else friendlyVoices.count { it.isEnglish }}):",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite
+                            )
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (showAllLanguages) "All languages" else "English only",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSilver
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Switch(
+                                    checked = showAllLanguages,
+                                    onCheckedChange = { showAllLanguages = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = NavyDarkest,
+                                        checkedTrackColor = GoldPrimary
+                                    ),
+                                    modifier = Modifier.size(36.dp)
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        if (availableVoices.isEmpty()) {
+                        val displayedFriendlyVoices = if (showAllLanguages) {
+                            friendlyVoices
+                        } else {
+                            friendlyVoices.filter { it.isEnglish }
+                        }
+
+                        if (displayedFriendlyVoices.isEmpty()) {
                             Text(
-                                text = "Using default system English voice (deep adult configuration).",
+                                text = "Using system default English voice (deep adult configuration).",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted
                             )
                         } else {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(availableVoices.take(12)) { voice ->
-                                    val isSelected = selectedVoiceName == voice.name
+                                items(displayedFriendlyVoices) { friendlyVoice ->
+                                    val isSelected = selectedVoiceName == friendlyVoice.voiceName
                                     Surface(
                                         onClick = {
-                                            selectedVoiceName = voice.name
-                                            viewModel.updateSpeechSettings(speedSlider, pitchSlider, voice.name)
+                                            selectedVoiceName = friendlyVoice.voiceName
+                                            viewModel.updateSpeechSettings(speedSlider, pitchSlider, friendlyVoice.voiceName)
                                         },
                                         shape = RoundedCornerShape(12.dp),
                                         color = if (isSelected) GoldPrimary else NavySurfaceElevated,
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) GoldPrimary else NavySurfaceBorder)
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isSelected) GoldPrimary else NavySurfaceBorder
+                                        ),
+                                        modifier = Modifier.testTag("voice_${friendlyVoice.displayName.replace(" ", "_")}")
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp)) {
                                             Text(
-                                                text = voice.name.substringAfter("voice_").take(14),
+                                                text = friendlyVoice.displayName,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isSelected) NavyDarkest else TextWhite
                                             )
                                             Text(
-                                                text = voice.locale.language.uppercase(),
+                                                text = friendlyVoice.locale.displayCountry.ifBlank { friendlyVoice.locale.language.uppercase() },
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontSize = 10.sp,
                                                 color = if (isSelected) NavyDarkest.copy(alpha = 0.7f) else TextMuted
@@ -436,15 +912,23 @@ fun ProfileScreen(
                         Button(
                             onClick = { viewModel.previewVoice(selectedVoiceName, speedSlider, pitchSlider) },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = GoldPrimary,
-                                contentColor = NavyDarkest
+                                containerColor = NavySurfaceHighlight,
+                                contentColor = TextWhite
                             ),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().height(46.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("preview_phone_voice_button")
                         ) {
-                            Icon(imageVector = Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                tint = GoldPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Preview Spoken Voice", fontWeight = FontWeight.Bold)
+                            Text("Preview Phone Voice", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

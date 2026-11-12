@@ -84,6 +84,17 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     private val _weeklyReport = MutableStateFlow<RiseRepository.WeeklyChartReport?>(null)
     val weeklyReport: StateFlow<RiseRepository.WeeklyChartReport?> = _weeklyReport.asStateFlow()
 
+    val friendlyVoices = ttsManager.friendlyVoices
+
+    private val _geminiAudioStatus = MutableStateFlow<String>("")
+    val geminiAudioStatus: StateFlow<String> = _geminiAudioStatus.asStateFlow()
+
+    private val _isGeneratingGeminiAudio = MutableStateFlow(false)
+    val isGeneratingGeminiAudio: StateFlow<Boolean> = _isGeneratingGeminiAudio.asStateFlow()
+
+    private val _geminiVoicePreviewPlaying = MutableStateFlow(false)
+    val geminiVoicePreviewPlaying: StateFlow<Boolean> = _geminiVoicePreviewPlaying.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.checkAndRefreshStreakAndShield()
@@ -334,8 +345,159 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun resetPhoneVoiceToDefault() {
+        viewModelScope.launch {
+            ttsManager.resetToDefaultVoice()
+            val current = userProfile.value ?: return@launch
+            val updated = current.copy(
+                speechSpeed = com.example.audio.TtsManager.DEFAULT_SPEED,
+                speechPitch = com.example.audio.TtsManager.DEFAULT_PITCH,
+                speechVoiceName = ""
+            )
+            repository.updateProfile(updated)
+            vibrationHelper.vibrateClick()
+        }
+    }
+
     fun previewVoice(voiceName: String, speed: Float, pitch: Float) {
         ttsManager.previewVoice(voiceName, speed, pitch)
+    }
+
+    // Gemini Realistic Voice APIs
+    fun getGeminiApiKey(): String = app.securePreferences.getGeminiApiKey() ?: ""
+
+    fun hasGeminiApiKey(): Boolean = app.securePreferences.hasGeminiApiKey()
+
+    fun saveGeminiApiKey(key: String) {
+        app.securePreferences.saveGeminiApiKey(key.trim())
+        _geminiAudioStatus.value = "Gemini key securely saved on device 🔒"
+        vibrationHelper.vibrateSuccess()
+        generateTomorrowMorningAudio(force = true)
+    }
+
+    fun clearGeminiApiKey() {
+        app.securePreferences.clearGeminiApiKey()
+        _geminiAudioStatus.value = "Gemini API key removed"
+        vibrationHelper.vibrateClick()
+    }
+
+    fun updateRealisticVoiceSettings(enabled: Boolean, voiceName: String, voiceStyle: String) {
+        viewModelScope.launch {
+            val current = userProfile.value ?: return@launch
+            val updated = current.copy(
+                useRealisticVoice = enabled,
+                geminiVoiceName = voiceName,
+                geminiVoiceStyle = voiceStyle
+            )
+            repository.updateProfile(updated)
+            if (enabled && hasGeminiApiKey()) {
+                generateTomorrowMorningAudio(force = true)
+            }
+            vibrationHelper.vibrateClick()
+        }
+    }
+
+    fun previewGeminiVoice(voiceName: String, voiceStyle: String) {
+        val apiKey = getGeminiApiKey()
+        if (apiKey.isBlank()) {
+            _geminiAudioStatus.value = "Please enter your Gemini API key first"
+            return
+        }
+        viewModelScope.launch {
+            _geminiVoicePreviewPlaying.value = true
+            _geminiAudioStatus.value = "Generating $voiceName preview sample..."
+            val previewFile = app.geminiTtsService.getPreviewAudioFile()
+            val sampleText = "Rise and shine, Emmanuel. This is your realistic AI briefing voice. Today is full of opportunity."
+            val result = app.geminiTtsService.generateSpeech(
+                apiKey = apiKey,
+                text = sampleText,
+                voiceName = voiceName,
+                voiceStyle = voiceStyle,
+                outputFile = previewFile
+            )
+            if (result.isSuccess) {
+                _geminiAudioStatus.value = "Playing $voiceName sample 🔊"
+                soundManager.playAudioFile(previewFile) {
+                    _geminiVoicePreviewPlaying.value = false
+                }
+            } else {
+                _geminiVoicePreviewPlaying.value = false
+                _geminiAudioStatus.value = "Preview failed: ${result.exceptionOrNull()?.message?.take(50)}"
+            }
+        }
+    }
+
+    fun generateTomorrowMorningAudio(force: Boolean = false) {
+        viewModelScope.launch {
+            val profile = userProfile.value ?: repository.checkAndRefreshStreakAndShield()
+            val apiKey = getGeminiApiKey()
+            if (!profile.useRealisticVoice) {
+                return@launch
+            }
+            if (apiKey.isBlank()) {
+                _geminiAudioStatus.value = "Set your Gemini API key to enable realistic voice"
+                return@launch
+            }
+
+            val tomorrowStr = repository.getTomorrowString()
+            val tomorrowTasks = repository.getTasksForDateSync(tomorrowStr)
+            val quote = repository.peekOrGetQuoteForBriefing()
+
+            val script = com.example.audio.TtsManager.buildMorningScript(
+                userName = profile.userName,
+                quoteText = quote.text,
+                quoteAuthor = quote.author,
+                todayQuestion = profile.morningWinQuestion,
+                tasks = tomorrowTasks.map { it.title }
+            )
+
+            _isGeneratingGeminiAudio.value = true
+            _geminiAudioStatus.value = "Generating tomorrow's morning briefing audio with ${profile.geminiVoiceName}..."
+
+            val morningFile = app.geminiTtsService.getMorningAudioFile()
+            val result = app.geminiTtsService.generateSpeech(
+                apiKey = apiKey,
+                text = script,
+                voiceName = profile.geminiVoiceName,
+                voiceStyle = profile.geminiVoiceStyle,
+                outputFile = morningFile
+            )
+
+            _isGeneratingGeminiAudio.value = false
+            if (result.isSuccess) {
+                _geminiAudioStatus.value = "Tomorrow's briefing ready (${morningFile.length() / 1024} KB) ✅"
+                val updatedProfile = profile.copy(lastMorningAudioGeneratedForDate = tomorrowStr)
+                repository.updateProfile(updatedProfile)
+            } else {
+                _geminiAudioStatus.value = "Audio generation error: ${result.exceptionOrNull()?.message?.take(60)}"
+            }
+        }
+    }
+
+    fun addTomorrowTask(title: String, category: CategoryItem, priority: Int = 2) {
+        if (title.isBlank()) return
+        val tomorrow = repository.getTomorrowString()
+        viewModelScope.launch {
+            repository.insertTask(
+                DailyTask(
+                    title = title.trim(),
+                    notes = "Planned the night before",
+                    date = tomorrow,
+                    categoryId = category.id,
+                    categoryName = category.name,
+                    categoryColor = category.colorHex,
+                    priority = priority,
+                    isRoutine = false,
+                    isEssential = false,
+                    xpReward = when (priority) { 3 -> 45; 2 -> 35; else -> 25 },
+                    coinReward = when (priority) { 3 -> 30; 2 -> 20; else -> 15 }
+                )
+            )
+            soundManager.playCoinSpendSound()
+            vibrationHelper.vibrateClick()
+            // Regenerate tomorrow morning audio automatically
+            generateTomorrowMorningAudio(force = true)
+        }
     }
 
     fun updateUserName(name: String) {
@@ -344,6 +506,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
             val current = userProfile.value ?: return@launch
             repository.updateProfile(current.copy(userName = name.trim()))
             vibrationHelper.vibrateClick()
+            generateTomorrowMorningAudio(force = true)
         }
     }
 
@@ -354,7 +517,10 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeEveningCheckIn() {
         _showEveningCheckIn.value = false
+        soundManager.stopAudioPlayback()
         ttsManager.stop()
+        // Generate tomorrow morning audio right when evening check-in wraps up
+        generateTomorrowMorningAudio(force = true)
     }
 
     fun openSundayCheckIn() {
@@ -383,13 +549,47 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         val completedCount = tasks.count { it.isCompleted }
         val xpEarned = tasks.filter { it.isCompleted }.sumOf { it.xpReward }
 
-        ttsManager.speakEveningReflection(
+        val script = com.example.audio.TtsManager.buildEveningScript(
             userName = profile.userName,
             completedCount = completedCount,
             totalCount = tasks.size,
             xpEarned = xpEarned,
             streakDays = profile.currentStreak
         )
+
+        val apiKey = getGeminiApiKey()
+        if (profile.useRealisticVoice && apiKey.isNotBlank()) {
+            viewModelScope.launch {
+                val eveningFile = app.geminiTtsService.getEveningAudioFile()
+                val result = app.geminiTtsService.generateSpeech(
+                    apiKey = apiKey,
+                    text = script,
+                    voiceName = profile.geminiVoiceName,
+                    voiceStyle = profile.geminiVoiceStyle,
+                    outputFile = eveningFile
+                )
+                if (result.isSuccess) {
+                    soundManager.playAudioFile(eveningFile)
+                } else {
+                    // Fall back to phone built-in TTS
+                    ttsManager.speakEveningReflection(
+                        userName = profile.userName,
+                        completedCount = completedCount,
+                        totalCount = tasks.size,
+                        xpEarned = xpEarned,
+                        streakDays = profile.currentStreak
+                    )
+                }
+            }
+        } else {
+            ttsManager.speakEveningReflection(
+                userName = profile.userName,
+                completedCount = completedCount,
+                totalCount = tasks.size,
+                xpEarned = xpEarned,
+                streakDays = profile.currentStreak
+            )
+        }
     }
 
     fun speakMorningBriefing() {
@@ -397,13 +597,27 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         val quote = quoteOfTheDay.value ?: return
         val tasks = todayTasks.value.map { it.title }
 
-        ttsManager.speakMorningBriefing(
-            userName = profile.userName,
-            quoteText = quote.text,
-            quoteAuthor = quote.author,
-            todayQuestion = profile.morningWinQuestion,
-            tasks = tasks
-        )
+        val morningFile = app.geminiTtsService.getMorningAudioFile()
+        if (profile.useRealisticVoice && morningFile.exists() && morningFile.length() > 0) {
+            val played = soundManager.playAudioFile(morningFile)
+            if (!played) {
+                ttsManager.speakMorningBriefing(
+                    userName = profile.userName,
+                    quoteText = quote.text,
+                    quoteAuthor = quote.author,
+                    todayQuestion = profile.morningWinQuestion,
+                    tasks = tasks
+                )
+            }
+        } else {
+            ttsManager.speakMorningBriefing(
+                userName = profile.userName,
+                quoteText = quote.text,
+                quoteAuthor = quote.author,
+                todayQuestion = profile.morningWinQuestion,
+                tasks = tasks
+            )
+        }
     }
 
     fun testAlarmNow() {

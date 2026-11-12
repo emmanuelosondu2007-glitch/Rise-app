@@ -1,16 +1,55 @@
 package com.example
 
-import org.junit.Assert.*
+import com.example.audio.GeminiTtsService
+import com.example.audio.TtsManager
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Example local unit test, which will execute on the development machine (host).
- *
- * See [testing documentation](http://d.android.com/tools/testing).
- */
 class ExampleUnitTest {
-  @Test
-  fun addition_isCorrect() {
-    assertEquals(4, 2 + 2)
-  }
+
+    @Test
+    fun geminiVoices_containsPrebuiltOptions() {
+        val voices = GeminiTtsService.PREBUILT_VOICES
+        assertEquals(5, voices.size)
+        val names = voices.map { it.name }
+        assertTrue(names.contains("Charon"))
+        assertTrue(names.contains("Fenrir"))
+        assertTrue(names.contains("Puck"))
+        assertTrue(names.contains("Kore"))
+        assertTrue(names.contains("Aoede"))
+    }
+
+    @Test
+    fun morningScript_containsRequiredElements() {
+        val script = TtsManager.buildMorningScript(
+            userName = "Emmanuel",
+            quoteText = "Commit your work to the Lord",
+            quoteAuthor = "Proverbs 16:3",
+            todayQuestion = "What would make today a win?",
+            tasks = listOf("Complete devotion", "Read 10 pages")
+        )
+
+        assertTrue(script.contains("Good morning Emmanuel"))
+        assertTrue(script.contains("Commit your work to the Lord"))
+        assertTrue(script.contains("What would make today a win?"))
+        assertTrue(script.contains("First, Complete devotion"))
+        assertTrue(script.contains("Second, Read 10 pages"))
+    }
+
+    @Test
+    fun eveningScript_containsScoreAndStreak() {
+        val script = TtsManager.buildEveningScript(
+            userName = "Emmanuel",
+            completedCount = 4,
+            totalCount = 4,
+            xpEarned = 140,
+            streakDays = 5
+        )
+
+        assertTrue(script.contains("Good evening Emmanuel"))
+        assertTrue(script.contains("perfect score"))
+        assertTrue(script.contains("140 XP"))
+        assertTrue(script.contains("5 days"))
+    }
 }

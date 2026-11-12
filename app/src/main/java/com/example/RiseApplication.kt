@@ -22,6 +22,8 @@ class RiseApplication : Application() {
     val vibrationHelper by lazy { VibrationHelper(this) }
     val ttsManager by lazy { TtsManager(this) }
     val alarmScheduler by lazy { AlarmScheduler(this) }
+    val securePreferences by lazy { com.example.data.security.SecurePreferences(this) }
+    val geminiTtsService by lazy { com.example.audio.GeminiTtsService(this) }
 
     override fun onCreate() {
         super.onCreate()

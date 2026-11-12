@@ -85,6 +85,66 @@ class SoundManager(private val context: Context) {
         mediaPlayer = null
     }
 
+    private var audioFilePlayer: MediaPlayer? = null
+
+    /**
+     * Plays a generated AI voice audio file on the ALARM stream at maximum volume
+     */
+    fun playAudioFile(file: java.io.File, onComplete: (() -> Unit)? = null): Boolean {
+        stopAudioPlayback()
+        if (!file.exists() || file.length() == 0L) {
+            return false
+        }
+        return try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            audioManager?.let { am ->
+                val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+            }
+
+            val mp = MediaPlayer().apply {
+                setDataSource(file.absolutePath)
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                setAudioAttributes(audioAttributes)
+                setOnCompletionListener {
+                    stopAudioPlayback()
+                    onComplete?.invoke()
+                }
+                setOnErrorListener { _, _, _ ->
+                    stopAudioPlayback()
+                    onComplete?.invoke()
+                    true
+                }
+                prepare()
+                start()
+            }
+            audioFilePlayer = mp
+            true
+        } catch (e: Exception) {
+            stopAudioPlayback()
+            false
+        }
+    }
+
+    fun stopAudioPlayback() {
+        try {
+            audioFilePlayer?.stop()
+            audioFilePlayer?.release()
+        } catch (ignored: Exception) {}
+        audioFilePlayer = null
+    }
+
+    fun isPlayingAudioFile(): Boolean {
+        return try {
+            audioFilePlayer?.isPlaying == true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /**
      * Task complete victory chime
      */

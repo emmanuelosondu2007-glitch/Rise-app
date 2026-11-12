@@ -261,7 +261,7 @@ fun MainAppContent(viewModel: RiseViewModel) {
                     onSpeakReflection = { viewModel.speakEveningReflection() },
                     onAddTomorrowTask = { title ->
                         val defaultCat = categories.firstOrNull() ?: CategoryItem(name = "Personal", colorHex = "#06B6D4", iconEmoji = "🌿")
-                        viewModel.addTask(title, "Scheduled during evening reflection", null, defaultCat, 2)
+                        viewModel.addTomorrowTask(title, defaultCat)
                     }
                 )
             }
