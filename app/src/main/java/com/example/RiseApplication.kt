@@ -27,11 +27,21 @@ class RiseApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Ensure database is initialized & streaks checked
-        applicationScope.launch {
-            repository.checkAndRefreshStreakAndShield()
+        // Ensure default data initialized & alarms rescheduled from saved profile
+        applicationScope.launch(Dispatchers.IO) {
+            repository.ensureDefaultDataInitialized()
+            val user = repository.getProfileSync()
+            if (user.alarmEnabled) {
+                alarmScheduler.scheduleMorningAlarm(user.alarmHour, user.alarmMinute)
+            }
+            if (user.eveningReminderEnabled) {
+                alarmScheduler.scheduleEveningCheckIn(user.eveningHour, user.eveningMinute)
+            }
+            if (user.sundayReminderEnabled) {
+                alarmScheduler.scheduleSundayCheckIn(user.sundayReminderHour, user.sundayReminderMinute)
+            }
+            alarmScheduler.scheduleNightPreGeneration(23, 0)
         }
-        alarmScheduler.scheduleNightPreGeneration(23, 0)
     }
 
     override fun onTerminate() {

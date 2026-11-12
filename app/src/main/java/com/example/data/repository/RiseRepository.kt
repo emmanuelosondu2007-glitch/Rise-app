@@ -47,6 +47,227 @@ class RiseRepository(private val db: RiseDatabase) {
         return "${cal.get(Calendar.YEAR)}-W${cal.get(Calendar.WEEK_OF_YEAR)}"
     }
 
+    suspend fun getProfileSync(): UserProfile {
+        return db.userProfileDao().getUserProfile() ?: ensureDefaultDataInitialized()
+    }
+
+    suspend fun ensureDefaultDataInitialized(): UserProfile {
+        val today = getTodayString()
+        val currentWeek = getCurrentWeekId()
+
+        // 1. Profile check: if no UserProfile row, insert default profile (id 1, Emmanuel, alarm 7:00 enabled, evening 20:30, Sunday 21:00, all reminders enabled)
+        var profile = db.userProfileDao().getUserProfile()
+        if (profile == null) {
+            val defaultProfile = UserProfile(
+                id = 1,
+                userName = "Emmanuel",
+                xp = 50,
+                level = 1,
+                levelTitle = "Starter",
+                coins = 120,
+                currentStreak = 1,
+                highestStreak = 1,
+                listCompletionStreak = 0,
+                highestListCompletionStreak = 0,
+                lastActiveDate = today,
+                streakShieldAvailable = true,
+                lastShieldResetWeek = currentWeek,
+                busyDayMode = false,
+                alarmHour = 7,
+                alarmMinute = 0,
+                alarmEnabled = true,
+                eveningHour = 20,
+                eveningMinute = 30,
+                eveningReminderEnabled = true,
+                sundayReminderHour = 21,
+                sundayReminderMinute = 0,
+                sundayReminderEnabled = true,
+                soundEnabled = true,
+                ttsVoiceEnabled = true,
+                speechSpeed = 0.95f,
+                speechPitch = 0.85f,
+                morningWinQuestion = "What is the one thing that would make today a win?",
+                totalTasksCompleted = 0,
+                perfectDaysCount = 0
+            )
+            db.userProfileDao().insertUserProfile(defaultProfile)
+            profile = defaultProfile
+        }
+
+        // 2. Categories check: if categories table is empty, insert the 6 default categories
+        val categories = db.categoryDao().getAllCategoriesSync()
+        if (categories.isEmpty()) {
+            val defaultCategories = listOf(
+                CategoryItem(name = "Spiritual", colorHex = "#8B5CF6", iconEmoji = "✨", description = "devotion, prayer, sermons", isDefault = true),
+                CategoryItem(name = "Law", colorHex = "#3B82F6", iconEmoji = "⚖️", description = "lectures, study, assignments", isDefault = true),
+                CategoryItem(name = "Mentorship", colorHex = "#10B981", iconEmoji = "🌱", description = "daily report, book reading, voice notes", isDefault = true),
+                CategoryItem(name = "Editing / Bezalim", colorHex = "#F59E0B", iconEmoji = "🎬", description = "clipping, video projects", isDefault = true),
+                CategoryItem(name = "Fellowship", colorHex = "#EC4899", iconEmoji = "🤝", description = "tech unit, meetings", isDefault = true),
+                CategoryItem(name = "Personal", colorHex = "#06B6D4", iconEmoji = "🌿", description = "health, rest, family", isDefault = true)
+            )
+            db.categoryDao().insertAllCategories(defaultCategories)
+        }
+
+        // 3. Badges check: if missing, insert initial badges
+        val badge = db.badgeDao().getBadgeByCode("FIRST_VICTORY")
+        if (badge == null) {
+            val initialBadges = listOf(
+                BadgeItem(code = "FIRST_VICTORY", title = "First Victory", description = "Conquer your very first task", iconEmoji = "🎯", xpBonus = 50),
+                BadgeItem(code = "STREAK_3", title = "Sparks Ignited", description = "Hold a 3-day winning streak", iconEmoji = "🔥", xpBonus = 80),
+                BadgeItem(code = "STREAK_7", title = "Blazing Unstoppable", description = "Reach a 7-day daily streak", iconEmoji = "⚡", xpBonus = 150),
+                BadgeItem(code = "STREAK_30", title = "Iron Will", description = "Maintain a monumental 30-day streak", iconEmoji = "👑", xpBonus = 500),
+                BadgeItem(code = "LIST_MASTER_3", title = "Habit Formed", description = "Completed 100% of your daily list 3 days in a row", iconEmoji = "📋", xpBonus = 100),
+                BadgeItem(code = "LIST_MASTER_7", title = "To-Do List Person", description = "Completed your list 7 consecutive days!", iconEmoji = "🏆", xpBonus = 250),
+                BadgeItem(code = "CLEAN_SWEEP", title = "Daily Clean Sweep", description = "Complete 100% of tasks in one day", iconEmoji = "✨", xpBonus = 100),
+                BadgeItem(code = "PERFECT_WEEK", title = "Rise Ascendant", description = "Achieve all weekly goals in a single week", iconEmoji = "🌟", xpBonus = 350),
+                BadgeItem(code = "SUNDAY_REVIEWER", title = "Strategic Planner", description = "Completed Sunday night check-in & weekly prep", iconEmoji = "🧭", xpBonus = 200),
+                BadgeItem(code = "REWARD_CLAIMED", title = "Sweet Taste of Victory", description = "Redeem your first reward in the shop", iconEmoji = "🎁", xpBonus = 60),
+                BadgeItem(code = "EARLY_RISER", title = "Dawn Warrior", description = "Rise to the morning alarm 3 times", iconEmoji = "🌅", xpBonus = 120)
+            )
+            db.badgeDao().insertAll(initialBadges)
+        }
+
+        // 4. Quotes check: if quotes table is empty, insert quotes
+        if (db.quoteDao().getQuoteCount() == 0) {
+            db.quoteDao().insertAll(com.example.data.quotes.QuoteBank.quotes)
+        }
+
+        // 5. Daily routine & weekly tasks check: recreate without duplicates
+        val todayTasks = db.taskDao().getTasksForDateSync(today)
+        val routineTemplates = listOf(
+            DailyTask(
+                title = "On waking: Devotion and prayer, write one line of what I learned",
+                notes = "Spiritual foundation for the day",
+                date = today,
+                isCompleted = false,
+                xpReward = 35,
+                coinReward = 20,
+                categoryName = "Spiritual",
+                categoryColor = "#8B5CF6",
+                isRoutine = true,
+                isEssential = true,
+                priority = 3
+            ),
+            DailyTask(
+                title = "After lectures: Read the two write-ups and note what I learned",
+                notes = "Mentorship growth write-ups",
+                date = today,
+                isCompleted = false,
+                xpReward = 30,
+                coinReward = 20,
+                categoryName = "Mentorship",
+                categoryColor = "#10B981",
+                isRoutine = true,
+                isEssential = true,
+                priority = 2
+            ),
+            DailyTask(
+                title = "Evening: Read 10 pages of my assigned book",
+                notes = "Consistent daily reading habit",
+                date = today,
+                isCompleted = false,
+                xpReward = 30,
+                coinReward = 20,
+                categoryName = "Mentorship",
+                categoryColor = "#10B981",
+                isRoutine = true,
+                isEssential = false,
+                priority = 2
+            ),
+            DailyTask(
+                title = "Night: Submit my daily report before 11:30pm (reminder at 10:30pm)",
+                notes = "Daily accountability submission",
+                date = today,
+                isCompleted = false,
+                xpReward = 40,
+                coinReward = 25,
+                categoryName = "Mentorship",
+                categoryColor = "#10B981",
+                isRoutine = true,
+                isEssential = true,
+                priority = 3
+            )
+        )
+
+        for (rt in routineTemplates) {
+            if (todayTasks.none { it.title.equals(rt.title, ignoreCase = true) }) {
+                db.taskDao().insertTask(rt)
+            }
+        }
+
+        fun getDateForDayOfWeek(targetDay: Int): String {
+            val c = Calendar.getInstance()
+            c.set(Calendar.DAY_OF_WEEK, targetDay)
+            return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(c.time)
+        }
+
+        val tuesdayDate = getDateForDayOfWeek(Calendar.TUESDAY)
+        val fridayDate = getDateForDayOfWeek(Calendar.FRIDAY)
+        val saturdayDate = getDateForDayOfWeek(Calendar.SATURDAY)
+
+        val tTasks = db.taskDao().getTasksForDateSync(tuesdayDate)
+        if (tTasks.none { it.title.contains("Sermon 1", ignoreCase = true) }) {
+            db.taskDao().insertTask(
+                DailyTask(
+                    title = "Tuesday: Listen to Sermon 1 and write what I learned",
+                    notes = "Spiritual sermon reflection",
+                    date = tuesdayDate,
+                    isCompleted = false,
+                    xpReward = 45,
+                    coinReward = 30,
+                    categoryName = "Spiritual",
+                    categoryColor = "#8B5CF6",
+                    scheduledDayOfWeek = Calendar.TUESDAY,
+                    isRoutine = false,
+                    isEssential = true,
+                    priority = 3
+                )
+            )
+        }
+
+        val fTasks = db.taskDao().getTasksForDateSync(fridayDate)
+        if (fTasks.none { it.title.contains("Sermon 2", ignoreCase = true) }) {
+            db.taskDao().insertTask(
+                DailyTask(
+                    title = "Friday: Listen to Sermon 2 and write what I learned",
+                    notes = "Spiritual sermon reflection",
+                    date = fridayDate,
+                    isCompleted = false,
+                    xpReward = 45,
+                    coinReward = 30,
+                    categoryName = "Spiritual",
+                    categoryColor = "#8B5CF6",
+                    scheduledDayOfWeek = Calendar.FRIDAY,
+                    isRoutine = false,
+                    isEssential = true,
+                    priority = 3
+                )
+            )
+        }
+
+        val sTasks = db.taskDao().getTasksForDateSync(saturdayDate)
+        if (sTasks.none { it.title.contains("voice note", ignoreCase = true) }) {
+            db.taskDao().insertTask(
+                DailyTask(
+                    title = "Saturday: Record my weekly book voice note before 9pm",
+                    notes = "Mentorship weekly audio summary",
+                    date = saturdayDate,
+                    isCompleted = false,
+                    xpReward = 50,
+                    coinReward = 35,
+                    categoryName = "Mentorship",
+                    categoryColor = "#10B981",
+                    scheduledDayOfWeek = Calendar.SATURDAY,
+                    isRoutine = false,
+                    isEssential = true,
+                    priority = 3
+                )
+            )
+        }
+
+        return checkAndRefreshStreakAndShield()
+    }
+
     /**
      * Nightly maintenance:
      * 1. Rollover unfinished past tasks to today automatically with isMovedFromPreviousDay = true (no XP lost, no streak broken!)
@@ -533,5 +754,5 @@ class RiseRepository(private val db: RiseDatabase) {
 
     suspend fun insertReward(reward: RewardItem): Long = db.rewardDao().insertReward(reward)
     suspend fun deleteReward(reward: RewardItem) = db.rewardDao().deleteReward(reward)
-    suspend fun updateProfile(profile: UserProfile) = db.userProfileDao().updateUserProfile(profile)
+    suspend fun updateProfile(profile: UserProfile) = db.userProfileDao().insertUserProfile(profile.copy(id = 1))
 }

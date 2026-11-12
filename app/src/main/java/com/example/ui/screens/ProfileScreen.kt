@@ -42,6 +42,12 @@ import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import android.os.Build
+import android.provider.Settings
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -58,6 +64,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -123,10 +130,12 @@ fun ProfileScreen(
     val isPreviewGenerating by viewModel.isPreviewGenerating.collectAsState()
     val isPreviewPlaying by viewModel.isPreviewPlaying.collectAsState()
     val geminiDailyUsesCount by viewModel.geminiDailyUsesCount.collectAsState()
+    val alarmStatus by viewModel.alarmStatus.collectAsState()
 
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<CategoryItem?>(null) }
+    var showExactAlarmPermissionDialog by remember { mutableStateOf(false) }
 
     // Gemini Realistic Voice State
     var useRealisticVoice by remember(userProfile?.useRealisticVoice) {
@@ -1169,7 +1178,12 @@ fun ProfileScreen(
 
                             Switch(
                                 checked = alarmEnabled,
-                                onCheckedChange = { viewModel.updateAlarmTime(alarmHour, alarmMin, it) },
+                                onCheckedChange = { isEnabled ->
+                                    if (isEnabled && !viewModel.alarmScheduler.canScheduleExactAlarms()) {
+                                        showExactAlarmPermissionDialog = true
+                                    }
+                                    viewModel.updateAlarmTime(alarmHour, alarmMin, isEnabled)
+                                },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = NavyDarkest,
                                     checkedTrackColor = GoldPrimary
@@ -1185,7 +1199,14 @@ fun ProfileScreen(
                         ) {
                             Surface(
                                 onClick = {
-                                    TimePickerDialog(context, { _, h, m -> viewModel.updateAlarmTime(h, m, true) }, alarmHour, alarmMin, false).show()
+                                    TimePickerDialog(context, { _, h, m ->
+                                        val timeStr = String.format("%02d:%02d %s", if (h % 12 == 0) 12 else h % 12, m, if (h >= 12) "PM" else "AM")
+                                        Toast.makeText(context, "Alarm set for $timeStr", Toast.LENGTH_SHORT).show()
+                                        if (!viewModel.alarmScheduler.canScheduleExactAlarms()) {
+                                            showExactAlarmPermissionDialog = true
+                                        }
+                                        viewModel.updateAlarmTime(h, m, true)
+                                    }, alarmHour, alarmMin, false).show()
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 color = NavySurfaceElevated,
@@ -1201,6 +1222,85 @@ fun ProfileScreen(
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text("Test Loud Alarm", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        // 4. CLEAR ALARM STATUS
+                        Spacer(modifier = Modifier.height(10.dp))
+                        if (alarmStatus.isScheduled) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(EmeraldSuccess.copy(alpha = 0.12f))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(EmeraldSuccess)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Alarm set for ${alarmStatus.formattedTime ?: "tomorrow"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = EmeraldSuccess,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        } else if (alarmStatus.needsPermissionFix) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFF5252).copy(alpha = 0.12f))
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFF5252))
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Alarm NOT set: permission needed",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFFF5252),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        if (!alarmStatus.canScheduleExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        } else if (!alarmStatus.canUseFullScreen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        } else {
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.parse("package:${context.packageName}")
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Fix", color = GoldPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
                             }
                         }
                     }
@@ -1271,6 +1371,50 @@ fun ProfileScreen(
                     }
                 }
             }
+        }
+
+        // Exact Alarm Permission Dialog (Requirement 3)
+        if (showExactAlarmPermissionDialog) {
+            AlertDialog(
+                onDismissRequest = { showExactAlarmPermissionDialog = false },
+                title = {
+                    Text(
+                        text = "Exact Alarm Permission",
+                        color = TextWhite,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Rise needs permission to wake you up on time. Without this, alarms may be delayed or not ring at all.",
+                        color = TextSilver,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showExactAlarmPermissionDialog = false
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest)
+                    ) {
+                        Text("Open Settings", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showExactAlarmPermissionDialog = false }) {
+                        Text("Cancel", color = TextMuted)
+                    }
+                },
+                containerColor = NavySurface,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
     }
 }

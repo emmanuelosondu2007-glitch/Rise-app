@@ -4,13 +4,94 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.app.NotificationManager
 import android.os.Build
 import android.util.Log
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 class AlarmScheduler(private val context: Context) {
 
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+
+    data class AlarmStatus(
+        val isScheduled: Boolean,
+        val statusText: String,
+        val needsPermissionFix: Boolean,
+        val formattedTime: String? = null,
+        val canScheduleExact: Boolean = true,
+        val canUseFullScreen: Boolean = true
+    )
+
+    fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager?.canScheduleExactAlarms() ?: false
+        } else {
+            true
+        }
+    }
+
+    fun canUseFullScreenIntent(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            notificationManager?.canUseFullScreenIntent() ?: true
+        } else {
+            true
+        }
+    }
+
+    fun getAlarmStatus(alarmEnabled: Boolean, savedHour: Int, savedMinute: Int): AlarmStatus {
+        val exactPerm = canScheduleExactAlarms()
+        val fullScreenPerm = canUseFullScreenIntent()
+
+        if (!alarmEnabled) {
+            return AlarmStatus(
+                isScheduled = false,
+                statusText = "Alarm is turned off",
+                needsPermissionFix = false,
+                canScheduleExact = exactPerm,
+                canUseFullScreen = fullScreenPerm
+            )
+        }
+
+        if (!exactPerm || !fullScreenPerm) {
+            return AlarmStatus(
+                isScheduled = false,
+                statusText = "Alarm NOT set: permission needed",
+                needsPermissionFix = true,
+                canScheduleExact = exactPerm,
+                canUseFullScreen = fullScreenPerm
+            )
+        }
+
+        val nextAlarm = alarmManager?.nextAlarmClock
+        if (nextAlarm != null) {
+            val calNow = Calendar.getInstance()
+            val calAlarm = Calendar.getInstance().apply { timeInMillis = nextAlarm.triggerTime }
+            val timeFormatted = SimpleDateFormat("h:mm a", Locale.getDefault()).format(calAlarm.time)
+            val isTomorrow = calAlarm.get(Calendar.DAY_OF_YEAR) != calNow.get(Calendar.DAY_OF_YEAR)
+            val dayWord = if (isTomorrow) "tomorrow" else "today"
+            val fullText = "$timeFormatted $dayWord"
+            return AlarmStatus(
+                isScheduled = true,
+                statusText = "Alarm set for $fullText",
+                needsPermissionFix = false,
+                formattedTime = fullText,
+                canScheduleExact = exactPerm,
+                canUseFullScreen = fullScreenPerm
+            )
+        }
+
+        return AlarmStatus(
+            isScheduled = false,
+            statusText = "Alarm NOT set: permission needed",
+            needsPermissionFix = true,
+            canScheduleExact = exactPerm,
+            canUseFullScreen = fullScreenPerm
+        )
+    }
 
     companion object {
         const val ALARM_REQUEST_CODE = 1001

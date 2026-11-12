@@ -41,15 +41,29 @@ class AlarmReceiver : BroadcastReceiver() {
 
         createNotificationChannels(context)
 
-        when (alarmType) {
-            AlarmScheduler.TYPE_MORNING_ALARM -> handleMorningAlarm(context)
-            AlarmScheduler.TYPE_SUNDAY_CHECKIN -> handleSundayCheckIn(context)
-            AlarmScheduler.TYPE_NIGHT_PREGEN -> handleNightPreGeneration(context)
-            else -> handleEveningCheckIn(context)
+        val app = context.applicationContext as? RiseApplication ?: return
+        val pendingResult = goAsync()
+
+        app.applicationScope.launch(Dispatchers.IO) {
+            try {
+                val profile = app.repository.getProfileSync()
+
+                when (alarmType) {
+                    AlarmScheduler.TYPE_MORNING_ALARM -> handleMorningAlarm(context, profile)
+                    AlarmScheduler.TYPE_SUNDAY_CHECKIN -> handleSundayCheckIn(context, profile)
+                    AlarmScheduler.TYPE_NIGHT_PREGEN -> handleNightPreGeneration(context, profile)
+                    else -> handleEveningCheckIn(context, profile)
+                }
+            } finally {
+                wakeLock?.let {
+                    if (it.isHeld) it.release()
+                }
+                pendingResult.finish()
+            }
         }
     }
 
-    private fun handleMorningAlarm(context: Context) {
+    private fun handleMorningAlarm(context: Context, profile: com.example.data.model.UserProfile) {
         val alarmIntent = Intent(context, AlarmActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -86,12 +100,13 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startActivity(alarmIntent)
         } catch (ignored: Exception) {}
 
-        // Re-arm for tomorrow
-        val scheduler = AlarmScheduler(context)
-        scheduler.scheduleMorningAlarm(7, 0)
+        // Re-arm for tomorrow using saved profile alarm time, not hard-coded 7:00
+        if (profile.alarmEnabled) {
+            AlarmScheduler(context).scheduleMorningAlarm(profile.alarmHour, profile.alarmMinute)
+        }
     }
 
-    private fun handleEveningCheckIn(context: Context) {
+    private fun handleEveningCheckIn(context: Context, profile: com.example.data.model.UserProfile) {
         val checkInIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("OPEN_EVENING_CHECKIN", true)
@@ -117,10 +132,13 @@ class AlarmReceiver : BroadcastReceiver() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.notify(NOTIFICATION_EVENING_ID, notification)
 
-        AlarmScheduler(context).scheduleEveningCheckIn(20, 30)
+        // Reschedule evening check-in using saved profile evening time
+        if (profile.eveningReminderEnabled) {
+            AlarmScheduler(context).scheduleEveningCheckIn(profile.eveningHour, profile.eveningMinute)
+        }
     }
 
-    private fun handleSundayCheckIn(context: Context) {
+    private fun handleSundayCheckIn(context: Context, profile: com.example.data.model.UserProfile) {
         val checkInIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("OPEN_SUNDAY_CHECKIN", true)
@@ -146,56 +164,56 @@ class AlarmReceiver : BroadcastReceiver() {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.notify(NOTIFICATION_SUNDAY_ID, notification)
 
-        AlarmScheduler(context).scheduleSundayCheckIn(21, 0)
+        // Reschedule Sunday check-in using saved profile Sunday time
+        if (profile.sundayReminderEnabled) {
+            AlarmScheduler(context).scheduleSundayCheckIn(profile.sundayReminderHour, profile.sundayReminderMinute)
+        }
     }
 
-    private fun handleNightPreGeneration(context: Context) {
+    private suspend fun handleNightPreGeneration(context: Context, profile: com.example.data.model.UserProfile) {
         val app = context.applicationContext as? RiseApplication ?: return
-        app.applicationScope.launch(Dispatchers.IO) {
-            try {
-                val profile = app.database.userProfileDao().getUserProfile() ?: return@launch
-                val apiKey = app.securePreferences.getGeminiApiKey() ?: ""
-                if (!profile.useRealisticVoice || apiKey.isBlank()) {
-                    return@launch
-                }
-
-                val tomorrowStr = app.repository.getTomorrowString()
-                // Only generate if not already generated earlier (e.g. at evening check-in)
-                if (profile.lastMorningAudioGeneratedForDate == tomorrowStr) {
-                    return@launch
-                }
-
-                val tomorrowTasks = app.repository.getTasksForDateSync(tomorrowStr)
-                val quote = app.repository.peekOrGetQuoteForBriefing()
-
-                val script = TtsManager.buildMorningScript(
-                    userName = profile.userName,
-                    quoteText = quote.text,
-                    quoteAuthor = quote.author,
-                    todayQuestion = profile.morningWinQuestion,
-                    tasks = tomorrowTasks.map { it.title }
-                )
-
-                val morningFile = app.geminiTtsService.getMorningAudioFile()
-                val result = app.geminiTtsService.generateSpeech(
-                    apiKey = apiKey,
-                    text = script,
-                    voiceName = profile.geminiVoiceName,
-                    voiceStyle = profile.geminiVoiceStyle,
-                    outputFile = morningFile
-                )
-
-                if (result.isSuccess) {
-                    app.database.userProfileDao().updateUserProfile(
-                        profile.copy(lastMorningAudioGeneratedForDate = tomorrowStr)
-                    )
-                    val todayStr = app.repository.getTodayString()
-                    app.securePreferences.incrementGeminiDailyUsage(todayStr)
-                }
-            } catch (ignored: Exception) {
-            } finally {
-                AlarmScheduler(context).scheduleNightPreGeneration(23, 0)
+        try {
+            val apiKey = app.securePreferences.getGeminiApiKey() ?: ""
+            if (!profile.useRealisticVoice || apiKey.isBlank()) {
+                return
             }
+
+            val tomorrowStr = app.repository.getTomorrowString()
+            // Only generate if not already generated earlier (e.g. at evening check-in)
+            if (profile.lastMorningAudioGeneratedForDate == tomorrowStr) {
+                return
+            }
+
+            val tomorrowTasks = app.repository.getTasksForDateSync(tomorrowStr)
+            val quote = app.repository.peekOrGetQuoteForBriefing()
+
+            val script = TtsManager.buildMorningScript(
+                userName = profile.userName,
+                quoteText = quote.text,
+                quoteAuthor = quote.author,
+                todayQuestion = profile.morningWinQuestion,
+                tasks = tomorrowTasks.map { it.title }
+            )
+
+            val morningFile = app.geminiTtsService.getMorningAudioFile()
+            val result = app.geminiTtsService.generateSpeech(
+                apiKey = apiKey,
+                text = script,
+                voiceName = profile.geminiVoiceName,
+                voiceStyle = profile.geminiVoiceStyle,
+                outputFile = morningFile
+            )
+
+            if (result.isSuccess) {
+                app.database.userProfileDao().updateUserProfile(
+                    profile.copy(lastMorningAudioGeneratedForDate = tomorrowStr)
+                )
+                val todayStr = app.repository.getTodayString()
+                app.securePreferences.incrementGeminiDailyUsage(todayStr)
+            }
+        } catch (ignored: Exception) {
+        } finally {
+            AlarmScheduler(context).scheduleNightPreGeneration(23, 0)
         }
     }
 

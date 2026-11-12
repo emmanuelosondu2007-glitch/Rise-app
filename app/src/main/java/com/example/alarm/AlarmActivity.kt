@@ -136,6 +136,13 @@ class AlarmActivity : ComponentActivity() {
                             app.soundManager.stopAlarmRingtone()
                             app.vibrationHelper.stopVibration()
                             app.alarmScheduler.scheduleSnooze(5)
+                            // After Snooze, the next day's normal alarm must still be scheduled
+                            app.applicationScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                val profile = app.repository.getProfileSync()
+                                if (profile.alarmEnabled) {
+                                    app.alarmScheduler.scheduleMorningAlarm(profile.alarmHour, profile.alarmMinute)
+                                }
+                            }
                             Toast.makeText(this, "Alarm snoozed for 5 minutes ⏰", Toast.LENGTH_SHORT).show()
                             finish()
                         },

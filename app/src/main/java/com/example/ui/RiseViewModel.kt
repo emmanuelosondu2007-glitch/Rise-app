@@ -37,7 +37,9 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     private val soundManager = app.soundManager
     private val vibrationHelper = app.vibrationHelper
     val ttsManager = app.ttsManager
-    private val alarmScheduler = app.alarmScheduler
+    val alarmScheduler = app.alarmScheduler
+
+    fun canScheduleExactAlarms(): Boolean = alarmScheduler.canScheduleExactAlarms()
 
     val todayDateString = repository.getTodayString()
     val currentWeekId = repository.getCurrentWeekId()
@@ -113,13 +115,30 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         _geminiDailyUsesCount.value = next
     }
 
+    private val _alarmStatus = MutableStateFlow(
+        alarmScheduler.getAlarmStatus(true, 7, 0)
+    )
+    val alarmStatus: StateFlow<com.example.alarm.AlarmScheduler.AlarmStatus> = _alarmStatus.asStateFlow()
+
+    fun refreshAlarmStatus() {
+        viewModelScope.launch {
+            val profile = userProfile.value ?: repository.getProfileSync()
+            _alarmStatus.value = alarmScheduler.getAlarmStatus(
+                alarmEnabled = profile.alarmEnabled,
+                savedHour = profile.alarmHour,
+                savedMinute = profile.alarmMinute
+            )
+        }
+    }
+
     private var previewJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
-            repository.checkAndRefreshStreakAndShield()
+            repository.ensureDefaultDataInitialized()
             _quoteOfTheDay.value = repository.getQuoteOfTheDay()
             loadWeeklyReport()
+            refreshAlarmStatus()
         }
     }
 
@@ -143,7 +162,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleBusyDayMode() {
         viewModelScope.launch {
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             val newMode = !current.busyDayMode
             repository.updateProfile(current.copy(busyDayMode = newMode))
             vibrationHelper.vibrateClick()
@@ -332,7 +351,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateAlarmTime(hour: Int, minute: Int, enabled: Boolean) {
         viewModelScope.launch {
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             val updated = current.copy(alarmHour = hour, alarmMinute = minute, alarmEnabled = enabled)
             repository.updateProfile(updated)
             if (enabled) {
@@ -341,12 +360,13 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
                 alarmScheduler.cancelMorningAlarm()
             }
             vibrationHelper.vibrateClick()
+            refreshAlarmStatus()
         }
     }
 
     fun updateEveningTime(hour: Int, minute: Int, enabled: Boolean) {
         viewModelScope.launch {
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             val updated = current.copy(eveningHour = hour, eveningMinute = minute, eveningReminderEnabled = enabled)
             repository.updateProfile(updated)
             if (enabled) {
@@ -358,7 +378,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateSpeechSettings(speed: Float, pitch: Float, voiceName: String) {
         viewModelScope.launch {
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             val updated = current.copy(speechSpeed = speed, speechPitch = pitch, speechVoiceName = voiceName)
             repository.updateProfile(updated)
             ttsManager.applyVoiceSettings(speed, pitch, voiceName)
@@ -368,7 +388,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     fun resetPhoneVoiceToDefault() {
         viewModelScope.launch {
             ttsManager.resetToDefaultVoice()
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             val updated = current.copy(
                 speechSpeed = com.example.audio.TtsManager.DEFAULT_SPEED,
                 speechPitch = com.example.audio.TtsManager.DEFAULT_PITCH,
@@ -402,7 +422,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateRealisticVoiceSettings(enabled: Boolean, voiceName: String, voiceStyle: String) {
         viewModelScope.launch {
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             val updated = current.copy(
                 useRealisticVoice = enabled,
                 geminiVoiceName = voiceName,
@@ -427,15 +447,13 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         stopPreview()
 
         // 5. Tapping Preview should also select that voice, so the voice I last previewed is the one that's selected (yellow with a tick)
-        val currentProfile = userProfile.value
-        if (currentProfile != null) {
-            viewModelScope.launch {
-                val updated = currentProfile.copy(
-                    geminiVoiceName = voiceName,
-                    geminiVoiceStyle = voiceStyle
-                )
-                repository.updateProfile(updated)
-            }
+        viewModelScope.launch {
+            val currentProfile = userProfile.value ?: repository.getProfileSync()
+            val updated = currentProfile.copy(
+                geminiVoiceName = voiceName,
+                geminiVoiceStyle = voiceStyle
+            )
+            repository.updateProfile(updated)
         }
 
         // 3. Keep the preview cache, and limit previews: if a voice's preview is already cached, never call the API again for it
@@ -573,7 +591,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     fun updateUserName(name: String) {
         if (name.isBlank()) return
         viewModelScope.launch {
-            val current = userProfile.value ?: return@launch
+            val current = userProfile.value ?: repository.getProfileSync()
             repository.updateProfile(current.copy(userName = name.trim()))
             vibrationHelper.vibrateClick()
         }
@@ -613,30 +631,42 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun speakEveningReflection() {
-        val profile = userProfile.value ?: return
-        val tasks = todayTasks.value
-        val completedCount = tasks.count { it.isCompleted }
-        val xpEarned = tasks.filter { it.isCompleted }.sumOf { it.xpReward }
+        viewModelScope.launch {
+            val profile = userProfile.value ?: repository.getProfileSync()
+            val tasks = todayTasks.value
+            val completedCount = tasks.count { it.isCompleted }
+            val xpEarned = tasks.filter { it.isCompleted }.sumOf { it.xpReward }
 
-        // 2. Use the phone's built-in voice for the evening congratulations, not Gemini
-        ttsManager.speakEveningReflection(
-            userName = profile.userName,
-            completedCount = completedCount,
-            totalCount = tasks.size,
-            xpEarned = xpEarned,
-            streakDays = profile.currentStreak
-        )
+            // 2. Use the phone's built-in voice for the evening congratulations, not Gemini
+            ttsManager.speakEveningReflection(
+                userName = profile.userName,
+                completedCount = completedCount,
+                totalCount = tasks.size,
+                xpEarned = xpEarned,
+                streakDays = profile.currentStreak
+            )
+        }
     }
 
     fun speakMorningBriefing() {
-        val profile = userProfile.value ?: return
-        val quote = quoteOfTheDay.value ?: return
-        val tasks = todayTasks.value.map { it.title }
+        viewModelScope.launch {
+            val profile = userProfile.value ?: repository.getProfileSync()
+            val quote = quoteOfTheDay.value ?: repository.peekOrGetQuoteForBriefing()
+            val tasks = todayTasks.value.map { it.title }
 
-        val morningFile = app.geminiTtsService.getMorningAudioFile()
-        if (profile.useRealisticVoice && morningFile.exists() && morningFile.length() > 0) {
-            val played = soundManager.playAudioFile(morningFile)
-            if (!played) {
+            val morningFile = app.geminiTtsService.getMorningAudioFile()
+            if (profile.useRealisticVoice && morningFile.exists() && morningFile.length() > 0) {
+                val played = soundManager.playAudioFile(morningFile)
+                if (!played) {
+                    ttsManager.speakMorningBriefing(
+                        userName = profile.userName,
+                        quoteText = quote.text,
+                        quoteAuthor = quote.author,
+                        todayQuestion = profile.morningWinQuestion,
+                        tasks = tasks
+                    )
+                }
+            } else {
                 ttsManager.speakMorningBriefing(
                     userName = profile.userName,
                     quoteText = quote.text,
@@ -645,14 +675,16 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
                     tasks = tasks
                 )
             }
-        } else {
-            ttsManager.speakMorningBriefing(
-                userName = profile.userName,
-                quoteText = quote.text,
-                quoteAuthor = quote.author,
-                todayQuestion = profile.morningWinQuestion,
-                tasks = tasks
-            )
+        }
+    }
+
+    fun rescheduleSavedAlarmIfPermitted() {
+        viewModelScope.launch {
+            val profile = userProfile.value ?: repository.getProfileSync()
+            if (profile.alarmEnabled && alarmScheduler.canScheduleExactAlarms()) {
+                alarmScheduler.scheduleMorningAlarm(profile.alarmHour, profile.alarmMinute)
+            }
+            refreshAlarmStatus()
         }
     }
 
