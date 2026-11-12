@@ -1,0 +1,57 @@
+name: Build Rise APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Get or create signing key
+        run: |
+          if git fetch origin signing:signing && git show signing:debug.keystore > debug.keystore && [ -s debug.keystore ]; then
+            echo "Using saved signing key"
+          else
+            rm -f debug.keystore
+            keytool -genkeypair -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Rise,O=Rise,C=NG"
+            mkdir /tmp/sig && cp debug.keystore /tmp/sig/ && cd /tmp/sig
+            git init -q -b signing && git add debug.keystore
+            git -c user.name=rise-bot -c user.email=rise-bot@users.noreply.github.com commit -qm "Signing key"
+            git push "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" signing
+          fi
+
+      - name: Build the app
+        run: gradle assembleDebug --no-configuration-cache --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/*.apk Rise.apk
+
+      - name: Publish APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Rise build ${{ github.run_number }}
+          files: Rise.apk
+          make_latest: true
