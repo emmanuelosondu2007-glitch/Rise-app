@@ -11,6 +11,9 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.example.audio.TtsManager
 import com.example.MainActivity
 import com.example.R
 import com.example.RiseApplication
@@ -41,6 +44,7 @@ class AlarmReceiver : BroadcastReceiver() {
         when (alarmType) {
             AlarmScheduler.TYPE_MORNING_ALARM -> handleMorningAlarm(context)
             AlarmScheduler.TYPE_SUNDAY_CHECKIN -> handleSundayCheckIn(context)
+            AlarmScheduler.TYPE_NIGHT_PREGEN -> handleNightPreGeneration(context)
             else -> handleEveningCheckIn(context)
         }
     }
@@ -143,6 +147,56 @@ class AlarmReceiver : BroadcastReceiver() {
         notificationManager?.notify(NOTIFICATION_SUNDAY_ID, notification)
 
         AlarmScheduler(context).scheduleSundayCheckIn(21, 0)
+    }
+
+    private fun handleNightPreGeneration(context: Context) {
+        val app = context.applicationContext as? RiseApplication ?: return
+        app.applicationScope.launch(Dispatchers.IO) {
+            try {
+                val profile = app.database.userProfileDao().getUserProfile() ?: return@launch
+                val apiKey = app.securePreferences.getGeminiApiKey() ?: ""
+                if (!profile.useRealisticVoice || apiKey.isBlank()) {
+                    return@launch
+                }
+
+                val tomorrowStr = app.repository.getTomorrowString()
+                // Only generate if not already generated earlier (e.g. at evening check-in)
+                if (profile.lastMorningAudioGeneratedForDate == tomorrowStr) {
+                    return@launch
+                }
+
+                val tomorrowTasks = app.repository.getTasksForDateSync(tomorrowStr)
+                val quote = app.repository.peekOrGetQuoteForBriefing()
+
+                val script = TtsManager.buildMorningScript(
+                    userName = profile.userName,
+                    quoteText = quote.text,
+                    quoteAuthor = quote.author,
+                    todayQuestion = profile.morningWinQuestion,
+                    tasks = tomorrowTasks.map { it.title }
+                )
+
+                val morningFile = app.geminiTtsService.getMorningAudioFile()
+                val result = app.geminiTtsService.generateSpeech(
+                    apiKey = apiKey,
+                    text = script,
+                    voiceName = profile.geminiVoiceName,
+                    voiceStyle = profile.geminiVoiceStyle,
+                    outputFile = morningFile
+                )
+
+                if (result.isSuccess) {
+                    app.database.userProfileDao().updateUserProfile(
+                        profile.copy(lastMorningAudioGeneratedForDate = tomorrowStr)
+                    )
+                    val todayStr = app.repository.getTodayString()
+                    app.securePreferences.incrementGeminiDailyUsage(todayStr)
+                }
+            } catch (ignored: Exception) {
+            } finally {
+                AlarmScheduler(context).scheduleNightPreGeneration(23, 0)
+            }
+        }
     }
 
     private fun createNotificationChannels(context: Context) {

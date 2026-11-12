@@ -41,7 +41,10 @@ class GeminiTtsService(private val context: Context) {
             GeminiVoice("Aoede", "Aoede (Poised)", "Melodic, inspiring, articulate")
         )
 
-        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent"
+        const val QUOTA_LIMIT_MESSAGE = "Daily free voice limit reached. Resets around 9am. Using phone voice for now."
+
+        private const val PRIMARY_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent"
+        private const val FALLBACK_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent"
     }
 
     private val client = OkHttpClient.Builder()
@@ -67,6 +70,60 @@ class GeminiTtsService(private val context: Context) {
         return File(context.filesDir, "rise_preview_$safeName.wav")
     }
 
+    private fun buildJsonBody(text: String, voiceName: String, voiceStyle: String): String {
+        val fullPrompt = "Read the following message aloud. Style instructions: $voiceStyle\n\nMessage to read:\n$text"
+        val jsonBody = JSONObject().apply {
+            val contentsArray = JSONArray().apply {
+                put(JSONObject().apply {
+                    val partsArray = JSONArray().apply {
+                        put(JSONObject().put("text", fullPrompt))
+                    }
+                    put("parts", partsArray)
+                })
+            }
+            put("contents", contentsArray)
+
+            val genConfig = JSONObject().apply {
+                val modalities = JSONArray().apply { put("AUDIO") }
+                put("responseModalities", modalities)
+
+                val speechConfig = JSONObject().apply {
+                    val voiceConfig = JSONObject().apply {
+                        val prebuiltVoiceConfig = JSONObject().apply {
+                            put("voiceName", voiceName)
+                        }
+                        put("prebuiltVoiceConfig", prebuiltVoiceConfig)
+                    }
+                    put("voiceConfig", voiceConfig)
+                }
+                put("speechConfig", speechConfig)
+            }
+            put("generationConfig", genConfig)
+        }
+        return jsonBody.toString()
+    }
+
+    private fun executeCall(url: String, apiKey: String, jsonString: String): Pair<Int, String> {
+        val requestBody = jsonString.toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url("$url?key=$apiKey")
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val code = response.code
+            val body = response.body?.string() ?: ""
+            return Pair(code, body)
+        }
+    }
+
+    private fun isQuotaError(code: Int, body: String): Boolean {
+        if (code == 429) return true
+        if (body.contains("RESOURCE_EXHAUSTED", ignoreCase = true)) return true
+        if (body.contains("quota", ignoreCase = true) && body.contains("exceeded", ignoreCase = true)) return true
+        return false
+    }
+
     suspend fun generateSpeech(
         apiKey: String,
         text: String,
@@ -79,47 +136,24 @@ class GeminiTtsService(private val context: Context) {
         }
 
         try {
-            val fullPrompt = "Read the following message aloud. Style instructions: $voiceStyle\n\nMessage to read:\n$text"
+            val jsonString = buildJsonBody(text, voiceName, voiceStyle)
 
-            val jsonBody = JSONObject().apply {
-                val contentsArray = JSONArray().apply {
-                    put(JSONObject().apply {
-                        val partsArray = JSONArray().apply {
-                            put(JSONObject().put("text", fullPrompt))
-                        }
-                        put("parts", partsArray)
-                    })
-                }
-                put("contents", contentsArray)
+            // Step 1: Call primary speech model
+            var (code, responseBody) = executeCall(PRIMARY_URL, apiKey, jsonString)
 
-                val genConfig = JSONObject().apply {
-                    val modalities = JSONArray().apply { put("AUDIO") }
-                    put("responseModalities", modalities)
-
-                    val speechConfig = JSONObject().apply {
-                        val voiceConfig = JSONObject().apply {
-                            val prebuiltVoiceConfig = JSONObject().apply {
-                                put("voiceName", voiceName)
-                            }
-                            put("prebuiltVoiceConfig", prebuiltVoiceConfig)
-                        }
-                        put("voiceConfig", voiceConfig)
-                    }
-                    put("speechConfig", speechConfig)
-                }
-                put("generationConfig", genConfig)
+            // Step 2: If primary model hits quota (429), try fallback model "gemini-3.8-flash-lite-tts" once
+            if (isQuotaError(code, responseBody)) {
+                val fallback = executeCall(FALLBACK_URL, apiKey, jsonString)
+                code = fallback.first
+                responseBody = fallback.second
             }
 
-            val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder()
-                .url("$BASE_URL?key=$apiKey")
-                .post(requestBody)
-                .build()
+            // Step 3: If still quota exceeded, return friendly limit message without retrying
+            if (isQuotaError(code, responseBody)) {
+                return@withContext Result.failure(Exception(QUOTA_LIMIT_MESSAGE))
+            }
 
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
-
-            if (!response.isSuccessful) {
+            if (code !in 200..299) {
                 val errorDetail = try {
                     val json = JSONObject(responseBody)
                     val errorObj = json.optJSONObject("error")
@@ -127,7 +161,7 @@ class GeminiTtsService(private val context: Context) {
                 } catch (e: Exception) {
                     responseBody
                 }
-                return@withContext Result.failure(Exception("Gemini API error (${response.code}): $errorDetail"))
+                return@withContext Result.failure(Exception("Gemini API error ($code): $errorDetail"))
             }
 
             val responseJson = JSONObject(responseBody)

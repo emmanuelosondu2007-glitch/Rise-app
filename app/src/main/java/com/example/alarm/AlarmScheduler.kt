@@ -17,11 +17,13 @@ class AlarmScheduler(private val context: Context) {
         const val EVENING_REQUEST_CODE = 1002
         const val SUNDAY_REQUEST_CODE = 1003
         const val SNOOZE_REQUEST_CODE = 1004
+        const val NIGHT_PREGEN_REQUEST_CODE = 1008
 
         const val EXTRA_ALARM_TYPE = "EXTRA_ALARM_TYPE"
         const val TYPE_MORNING_ALARM = "TYPE_MORNING_ALARM"
         const val TYPE_EVENING_CHECKIN = "TYPE_EVENING_CHECKIN"
         const val TYPE_SUNDAY_CHECKIN = "TYPE_SUNDAY_CHECKIN"
+        const val TYPE_NIGHT_PREGEN = "TYPE_NIGHT_PREGEN"
     }
 
     fun scheduleMorningAlarm(hour: Int, minute: Int) {
@@ -172,6 +174,39 @@ class AlarmScheduler(private val context: Context) {
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             SUNDAY_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                calendar.timeInMillis,
+                pendingIntent
+            )
+        } catch (ignored: Exception) {}
+    }
+
+    fun scheduleNightPreGeneration(hour: Int = 23, minute: Int = 0) {
+        if (alarmManager == null) return
+
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            putExtra(EXTRA_ALARM_TYPE, TYPE_NIGHT_PREGEN)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            NIGHT_PREGEN_REQUEST_CODE,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

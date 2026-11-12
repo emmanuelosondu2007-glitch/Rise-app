@@ -91,4 +91,15 @@ class SecurePreferences(private val context: Context) {
     fun clearGeminiApiKey() {
         prefs.edit().remove(KEY_ENCRYPTED_API_KEY).remove(KEY_IV).apply()
     }
+
+    fun getGeminiDailyUsageCount(dateStr: String): Int {
+        return prefs.getInt("gemini_usage_$dateStr", 0)
+    }
+
+    fun incrementGeminiDailyUsage(dateStr: String): Int {
+        val current = getGeminiDailyUsageCount(dateStr)
+        val next = current + 1
+        prefs.edit().putInt("gemini_usage_$dateStr", next).apply()
+        return next
+    }
 }

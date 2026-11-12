@@ -31,6 +31,7 @@ class RiseApplication : Application() {
         applicationScope.launch {
             repository.checkAndRefreshStreakAndShield()
         }
+        alarmScheduler.scheduleNightPreGeneration(23, 0)
     }
 
     override fun onTerminate() {

@@ -122,6 +122,7 @@ fun ProfileScreen(
     val activePreviewVoice by viewModel.activePreviewVoice.collectAsState()
     val isPreviewGenerating by viewModel.isPreviewGenerating.collectAsState()
     val isPreviewPlaying by viewModel.isPreviewPlaying.collectAsState()
+    val geminiDailyUsesCount by viewModel.geminiDailyUsesCount.collectAsState()
 
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
@@ -526,11 +527,44 @@ fun ProfileScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // Error Banner for Preview / Generation Failures
+                        // Daily Usage Quota Counter
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = NavySurfaceElevated,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("gemini_usage_counter_card")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Realistic voice uses today: $geminiDailyUsesCount of 10",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (geminiDailyUsesCount >= 10) FlameOrange else GoldBright,
+                                    modifier = Modifier.testTag("gemini_usage_counter")
+                                )
+                                Text(
+                                    text = "Free Tier",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSilver,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Error Banner for Preview / Generation Failures & 429 Quota Exceeded
                         if (geminiAudioStatus.contains("failed", ignoreCase = true) ||
-                            geminiAudioStatus.contains("error", ignoreCase = true)
+                            geminiAudioStatus.contains("error", ignoreCase = true) ||
+                            geminiAudioStatus.contains("limit reached", ignoreCase = true)
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -759,7 +793,7 @@ fun ProfileScreen(
                                     } else if (userProfile?.lastMorningAudioGeneratedForDate?.isNotEmpty() == true) {
                                         "Audio ready for date: ${userProfile?.lastMorningAudioGeneratedForDate} ✅"
                                     } else {
-                                        "Will generate tonight during evening check-in or when tasks are added."
+                                        "Will generate once tonight during evening check-in (or automatically at 11:00 PM)."
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSilver,
@@ -779,7 +813,7 @@ fun ProfileScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(40.dp)
-                                        .testTag("generate_audio_now_button")
+                                        .testTag("regenerate_morning_audio_button")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.AutoAwesome,
@@ -788,7 +822,7 @@ fun ProfileScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (isGeneratingGeminiAudio) "Generating Audio..." else "Generate Tomorrow's Audio Now",
+                                        text = if (isGeneratingGeminiAudio) "Regenerating Audio..." else "Regenerate morning audio",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
                                     )

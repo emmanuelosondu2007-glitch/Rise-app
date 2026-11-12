@@ -60,4 +60,12 @@ class ExampleUnitTest {
         assertTrue(script.contains("140 XP"))
         assertTrue(script.contains("5 days"))
     }
+
+    @Test
+    fun geminiQuotaLimitMessage_exactText() {
+        assertEquals(
+            "Daily free voice limit reached. Resets around 9am. Using phone voice for now.",
+            GeminiTtsService.QUOTA_LIMIT_MESSAGE
+        )
+    }
 }
