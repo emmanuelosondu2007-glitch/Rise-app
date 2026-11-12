@@ -62,6 +62,11 @@ class GeminiTtsService(private val context: Context) {
         return File(context.filesDir, "rise_voice_preview.wav")
     }
 
+    fun getVoicePreviewAudioFile(voiceName: String): File {
+        val safeName = voiceName.trim().lowercase().replace("[^a-z0-9]".toRegex(), "_")
+        return File(context.filesDir, "rise_preview_$safeName.wav")
+    }
+
     suspend fun generateSpeech(
         apiKey: String,
         text: String,

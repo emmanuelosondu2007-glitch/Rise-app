@@ -92,8 +92,18 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     private val _isGeneratingGeminiAudio = MutableStateFlow(false)
     val isGeneratingGeminiAudio: StateFlow<Boolean> = _isGeneratingGeminiAudio.asStateFlow()
 
-    private val _geminiVoicePreviewPlaying = MutableStateFlow(false)
-    val geminiVoicePreviewPlaying: StateFlow<Boolean> = _geminiVoicePreviewPlaying.asStateFlow()
+    private val _activePreviewVoice = MutableStateFlow<String?>(null)
+    val activePreviewVoice: StateFlow<String?> = _activePreviewVoice.asStateFlow()
+
+    private val _isPreviewGenerating = MutableStateFlow(false)
+    val isPreviewGenerating: StateFlow<Boolean> = _isPreviewGenerating.asStateFlow()
+
+    private val _isPreviewPlaying = MutableStateFlow(false)
+    val isPreviewPlaying: StateFlow<Boolean> = _isPreviewPlaying.asStateFlow()
+
+    val geminiVoicePreviewPlaying: StateFlow<Boolean> = _isPreviewPlaying.asStateFlow()
+
+    private var previewJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
@@ -397,32 +407,77 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun stopPreview() {
+        previewJob?.cancel()
+        previewJob = null
+        soundManager.stopAudioPlayback()
+        _activePreviewVoice.value = null
+        _isPreviewGenerating.value = false
+        _isPreviewPlaying.value = false
+    }
+
     fun previewGeminiVoice(voiceName: String, voiceStyle: String) {
+        // 1. Only one preview at a time: cancel any preview still generating or playing
+        stopPreview()
+
+        // 5. Tapping Preview should also select that voice, so the voice I last previewed is the one that's selected (yellow with a tick)
+        val currentProfile = userProfile.value
+        if (currentProfile != null) {
+            viewModelScope.launch {
+                val updated = currentProfile.copy(
+                    geminiVoiceName = voiceName,
+                    geminiVoiceStyle = voiceStyle
+                )
+                repository.updateProfile(updated)
+            }
+        }
+
         val apiKey = getGeminiApiKey()
         if (apiKey.isBlank()) {
             _geminiAudioStatus.value = "Please enter your Gemini API key first"
             return
         }
-        viewModelScope.launch {
-            _geminiVoicePreviewPlaying.value = true
-            _geminiAudioStatus.value = "Generating $voiceName preview sample..."
-            val previewFile = app.geminiTtsService.getPreviewAudioFile()
+
+        // 7. Cache each voice's preview audio after the first time, so previewing the same voice again plays instantly
+        val cacheFile = app.geminiTtsService.getVoicePreviewAudioFile(voiceName)
+        if (cacheFile.exists() && cacheFile.length() > 0) {
+            _activePreviewVoice.value = voiceName
+            _isPreviewGenerating.value = false
+            _isPreviewPlaying.value = true
+            _geminiAudioStatus.value = "Playing cached $voiceName sample 🔊"
+            // 4. Play previews on the normal MEDIA stream at current media volume
+            soundManager.playPreviewMediaAudio(cacheFile) {
+                stopPreview()
+            }
+            return
+        }
+
+        // Generate preview
+        _activePreviewVoice.value = voiceName
+        _isPreviewGenerating.value = true
+        _isPreviewPlaying.value = false
+        _geminiAudioStatus.value = "Generating $voiceName preview sample..."
+
+        previewJob = viewModelScope.launch {
             val sampleText = "Rise and shine, Emmanuel. This is your realistic AI briefing voice. Today is full of opportunity."
             val result = app.geminiTtsService.generateSpeech(
                 apiKey = apiKey,
                 text = sampleText,
                 voiceName = voiceName,
                 voiceStyle = voiceStyle,
-                outputFile = previewFile
+                outputFile = cacheFile
             )
             if (result.isSuccess) {
+                _isPreviewGenerating.value = false
+                _isPreviewPlaying.value = true
                 _geminiAudioStatus.value = "Playing $voiceName sample 🔊"
-                soundManager.playAudioFile(previewFile) {
-                    _geminiVoicePreviewPlaying.value = false
+                // 4. Play previews on the normal MEDIA stream at current media volume
+                soundManager.playPreviewMediaAudio(cacheFile) {
+                    stopPreview()
                 }
             } else {
-                _geminiVoicePreviewPlaying.value = false
                 val err = result.exceptionOrNull()?.message ?: "Unknown error"
+                stopPreview()
                 _geminiAudioStatus.value = "Preview failed: $err"
             }
         }

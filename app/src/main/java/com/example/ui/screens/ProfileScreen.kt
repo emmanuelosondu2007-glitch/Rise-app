@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -118,7 +119,9 @@ fun ProfileScreen(
     val friendlyVoices by viewModel.friendlyVoices.collectAsState()
     val geminiAudioStatus by viewModel.geminiAudioStatus.collectAsState()
     val isGeneratingGeminiAudio by viewModel.isGeneratingGeminiAudio.collectAsState()
-    val isGeminiPreviewPlaying by viewModel.geminiVoicePreviewPlaying.collectAsState()
+    val activePreviewVoice by viewModel.activePreviewVoice.collectAsState()
+    val isPreviewGenerating by viewModel.isPreviewGenerating.collectAsState()
+    val isPreviewPlaying by viewModel.isPreviewPlaying.collectAsState()
 
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
@@ -130,9 +133,7 @@ fun ProfileScreen(
     }
     var geminiApiKeyInput by remember { mutableStateOf(viewModel.getGeminiApiKey()) }
     var isApiKeyMasked by remember { mutableStateOf(true) }
-    var selectedGeminiVoice by remember(userProfile?.geminiVoiceName) {
-        mutableStateOf(userProfile?.geminiVoiceName ?: "Charon")
-    }
+    val selectedGeminiVoice = userProfile?.geminiVoiceName ?: "Charon"
     var geminiVoiceStyle by remember(userProfile?.geminiVoiceStyle) {
         mutableStateOf(
             userProfile?.geminiVoiceStyle
@@ -563,14 +564,26 @@ fun ProfileScreen(
                             fontWeight = FontWeight.Bold,
                             color = TextWhite
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Selected: $selectedGeminiVoice",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GoldBright,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.testTag("selected_voice_label")
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             GeminiTtsService.PREBUILT_VOICES.forEach { voice ->
                                 val isSelected = selectedGeminiVoice == voice.name
+                                val isThisVoiceActive = activePreviewVoice == voice.name
+                                val isThisVoiceGenerating = isThisVoiceActive && isPreviewGenerating
+                                val isThisVoicePlaying = isThisVoiceActive && isPreviewPlaying
+                                val isOtherVoiceGenerating = isPreviewGenerating && !isThisVoiceActive
+
                                 Surface(
                                     onClick = {
-                                        selectedGeminiVoice = voice.name
                                         viewModel.updateRealisticVoiceSettings(useRealisticVoice, voice.name, geminiVoiceStyle)
                                     },
                                     shape = RoundedCornerShape(12.dp),
@@ -579,7 +592,9 @@ fun ProfileScreen(
                                         1.dp,
                                         if (isSelected) GoldPrimary else NavySurfaceBorder
                                     ),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("voice_card_${voice.name}")
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -617,11 +632,18 @@ fun ProfileScreen(
 
                                         Button(
                                             onClick = {
-                                                viewModel.previewGeminiVoice(voice.name, geminiVoiceStyle)
+                                                if (isThisVoicePlaying) {
+                                                    viewModel.stopPreview()
+                                                } else {
+                                                    viewModel.previewGeminiVoice(voice.name, geminiVoiceStyle)
+                                                }
                                             },
+                                            enabled = !isOtherVoiceGenerating,
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isSelected) GoldPrimary else NavySurfaceHighlight,
-                                                contentColor = if (isSelected) NavyDarkest else TextWhite
+                                                containerColor = if (isThisVoicePlaying) FlameOrange else if (isSelected) GoldPrimary else NavySurfaceHighlight,
+                                                contentColor = if (isThisVoicePlaying) TextWhite else if (isSelected) NavyDarkest else TextWhite,
+                                                disabledContainerColor = NavySurfaceHighlight.copy(alpha = 0.5f),
+                                                disabledContentColor = TextMuted
                                             ),
                                             shape = RoundedCornerShape(10.dp),
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -629,13 +651,31 @@ fun ProfileScreen(
                                                 .height(34.dp)
                                                 .testTag("preview_gemini_${voice.name}")
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.VolumeUp,
-                                                contentDescription = "Preview",
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            if (isThisVoiceGenerating) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(12.dp),
+                                                    color = if (isSelected) NavyDarkest else GoldPrimary,
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Loading...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            } else if (isThisVoicePlaying) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Stop,
+                                                    contentDescription = "Stop",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.VolumeUp,
+                                                    contentDescription = "Preview",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                 }
