@@ -527,9 +527,38 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(18.dp))
 
+                        // Error Banner for Preview / Generation Failures
+                        if (geminiAudioStatus.contains("failed", ignoreCase = true) ||
+                            geminiAudioStatus.contains("error", ignoreCase = true)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = FlameOrange.copy(alpha = 0.2f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("gemini_error_banner")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("⚠️", fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = geminiAudioStatus,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = FlameYellow,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+
                         // Gemini Voices Picker
                         Text(
-                            text = "Choose Gemini Voice:",
+                            text = "Choose Gemini Voice (${GeminiTtsService.PREBUILT_VOICES.size}):",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = TextWhite

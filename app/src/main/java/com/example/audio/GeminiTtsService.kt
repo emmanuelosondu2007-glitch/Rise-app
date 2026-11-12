@@ -26,14 +26,22 @@ class GeminiTtsService(private val context: Context) {
 
     companion object {
         val PREBUILT_VOICES = listOf(
-            GeminiVoice("Charon", "Charon (Mentor)", "Deep, calm, measured storyteller"),
-            GeminiVoice("Fenrir", "Fenrir (Leader)", "Deep, resonant, authoritative"),
+            GeminiVoice("Charon", "Charon (Informative)", "Deep, calm, measured storyteller"),
+            GeminiVoice("Gacrux", "Gacrux (Mature)", "Deep, seasoned, authoritative tone"),
+            GeminiVoice("Sadaltager", "Sadaltager (Knowledgeable)", "Wise, experienced, intellectual"),
+            GeminiVoice("Algenib", "Algenib (Gravelly)", "Resonant, textured, grounded presence"),
+            GeminiVoice("Orus", "Orus (Firm)", "Decisive, disciplined, steady mentor"),
+            GeminiVoice("Iapetus", "Iapetus (Clear)", "Crisp, articulated, focused delivery"),
+            GeminiVoice("Rasalgethi", "Rasalgethi (Informative)", "Measured, thoughtful, analytical"),
+            GeminiVoice("Sulafat", "Sulafat (Warm)", "Supportive, inviting, compassionate"),
+            GeminiVoice("Achird", "Achird (Friendly)", "Approachable, conversational, upbeat"),
+            GeminiVoice("Fenrir", "Fenrir (Leader)", "Deep, resonant, commanding power"),
             GeminiVoice("Puck", "Puck (Energetic)", "Expressive, engaging, vibrant"),
             GeminiVoice("Kore", "Kore (Gentle)", "Warm, soothing, encouraging"),
             GeminiVoice("Aoede", "Aoede (Poised)", "Melodic, inspiring, articulate")
         )
 
-        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts:generateContent"
     }
 
     private val client = OkHttpClient.Builder()
@@ -107,13 +115,20 @@ class GeminiTtsService(private val context: Context) {
             val responseBody = response.body?.string() ?: ""
 
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("Gemini API error (${response.code}): $responseBody"))
+                val errorDetail = try {
+                    val json = JSONObject(responseBody)
+                    val errorObj = json.optJSONObject("error")
+                    errorObj?.optString("message") ?: responseBody
+                } catch (e: Exception) {
+                    responseBody
+                }
+                return@withContext Result.failure(Exception("Gemini API error (${response.code}): $errorDetail"))
             }
 
             val responseJson = JSONObject(responseBody)
             val candidates = responseJson.optJSONArray("candidates")
             if (candidates == null || candidates.length() == 0) {
-                return@withContext Result.failure(Exception("No candidates returned from Gemini."))
+                return@withContext Result.failure(Exception("No candidates returned from Gemini API."))
             }
 
             val firstCandidate = candidates.getJSONObject(0)
@@ -124,14 +139,14 @@ class GeminiTtsService(private val context: Context) {
             }
 
             var audioBase64: String? = null
-            var mimeType = "audio/wav"
+            var mimeType: String? = null
 
             for (i in 0 until parts.length()) {
                 val part = parts.getJSONObject(i)
                 val inlineData = part.optJSONObject("inlineData")
                 if (inlineData != null) {
                     audioBase64 = inlineData.optString("data")
-                    mimeType = inlineData.optString("mimeType", "audio/wav")
+                    mimeType = inlineData.optString("mimeType", null)
                     break
                 }
             }
@@ -142,12 +157,14 @@ class GeminiTtsService(private val context: Context) {
 
             val rawBytes = Base64.decode(audioBase64, Base64.DEFAULT)
 
-            // Ensure valid audio container for Android MediaPlayer
+            // Extract sample rate from mimeType if provided (e.g. "audio/pcm;rate=24000"), defaulting to 24000
+            val sampleRate = parseSampleRate(mimeType, 24000)
+
+            // Ensure raw 16-bit mono PCM is properly wrapped with a standard 44-byte WAV header
             val finalBytes = if (isWavOrMp3Header(rawBytes)) {
                 rawBytes
             } else {
-                // Gemini audio returns 24000Hz 16-bit mono raw PCM
-                wrapPcmInWav(rawBytes, sampleRate = 24000, channels = 1, bitsPerSample = 16)
+                wrapPcmInWav(rawBytes, sampleRate = sampleRate, channels = 1, bitsPerSample = 16)
             }
 
             if (outputFile.exists()) {
@@ -159,6 +176,13 @@ class GeminiTtsService(private val context: Context) {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun parseSampleRate(mimeType: String?, defaultRate: Int = 24000): Int {
+        if (mimeType.isNullOrBlank()) return defaultRate
+        val rateRegex = Regex("""rate=(\d+)""", RegexOption.IGNORE_CASE)
+        val match = rateRegex.find(mimeType)
+        return match?.groupValues?.get(1)?.toIntOrNull() ?: defaultRate
     }
 
     private fun isWavOrMp3Header(bytes: ByteArray): Boolean {

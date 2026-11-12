@@ -11,9 +11,17 @@ class ExampleUnitTest {
     @Test
     fun geminiVoices_containsPrebuiltOptions() {
         val voices = GeminiTtsService.PREBUILT_VOICES
-        assertEquals(5, voices.size)
+        assertEquals(13, voices.size)
         val names = voices.map { it.name }
         assertTrue(names.contains("Charon"))
+        assertTrue(names.contains("Gacrux"))
+        assertTrue(names.contains("Sadaltager"))
+        assertTrue(names.contains("Algenib"))
+        assertTrue(names.contains("Orus"))
+        assertTrue(names.contains("Iapetus"))
+        assertTrue(names.contains("Rasalgethi"))
+        assertTrue(names.contains("Sulafat"))
+        assertTrue(names.contains("Achird"))
         assertTrue(names.contains("Fenrir"))
         assertTrue(names.contains("Puck"))
         assertTrue(names.contains("Kore"))

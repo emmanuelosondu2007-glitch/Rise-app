@@ -422,7 +422,8 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } else {
                 _geminiVoicePreviewPlaying.value = false
-                _geminiAudioStatus.value = "Preview failed: ${result.exceptionOrNull()?.message?.take(50)}"
+                val err = result.exceptionOrNull()?.message ?: "Unknown error"
+                _geminiAudioStatus.value = "Preview failed: $err"
             }
         }
     }
@@ -469,7 +470,8 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
                 val updatedProfile = profile.copy(lastMorningAudioGeneratedForDate = tomorrowStr)
                 repository.updateProfile(updatedProfile)
             } else {
-                _geminiAudioStatus.value = "Audio generation error: ${result.exceptionOrNull()?.message?.take(60)}"
+                val err = result.exceptionOrNull()?.message ?: "Unknown error"
+                _geminiAudioStatus.value = "Audio generation error: $err"
             }
         }
     }
