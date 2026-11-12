@@ -67,18 +67,19 @@ fun WeeklyProgressChartSection(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. COMPARISON HEADER BANNER
         Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = NavySurface),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.CalmCardSurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.CalmCardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -87,14 +88,14 @@ fun WeeklyProgressChartSection(
                         text = "WEEKLY PACE & VELOCITY",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = GoldPrimary,
+                        color = com.example.ui.theme.PeachSoft,
                         letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "${report.thisWeekTotalCompleted} Tasks Completed",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                         color = TextWhite
                     )
                     Text(
@@ -105,7 +106,7 @@ fun WeeklyProgressChartSection(
                 }
 
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                     color = if (report.percentChangeVsLastWeek >= 0) EmeraldSuccess.copy(alpha = 0.2f) else FlameOrange.copy(alpha = 0.2f),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
@@ -114,7 +115,7 @@ fun WeeklyProgressChartSection(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
                         Icon(
                             imageVector = if (report.percentChangeVsLastWeek >= 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
@@ -128,7 +129,7 @@ fun WeeklyProgressChartSection(
                             text = "$sign${report.percentChangeVsLastWeek}%",
                             color = if (report.percentChangeVsLastWeek >= 0) EmeraldSuccess else FlameOrange,
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Black
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
@@ -137,14 +138,15 @@ fun WeeklyProgressChartSection(
 
         // 2. DAILY CATEGORY-COLORED BAR CHART (Mon to Sun)
         Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = NavySurface),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.CalmCardSurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.CalmCardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     text = "Daily Completions (Mon – Sun)",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = TextWhite
                 )
@@ -185,7 +187,7 @@ fun WeeklyProgressChartSection(
                                 modifier = Modifier
                                     .width(22.dp)
                                     .height(100.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(NavySurfaceElevated),
                                 contentAlignment = Alignment.BottomCenter
                             ) {
@@ -195,7 +197,7 @@ fun WeeklyProgressChartSection(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height((100 * barHeightRatio).dp)
-                                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                            .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                                     ) {
                                         day.categoryBreakdown.forEach { (catName, count) ->
                                             val segmentRatio = count.toFloat() / day.completedCount
@@ -230,11 +232,12 @@ fun WeeklyProgressChartSection(
         // 3. EFFORT BREAKDOWN RING CHART BY CATEGORY
         if (report.categoryDistribution.isNotEmpty()) {
             Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = NavySurface),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = com.example.ui.theme.CalmCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, com.example.ui.theme.CalmCardBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         text = "Weekly Effort by Category",
                         style = MaterialTheme.typography.titleSmall,

@@ -234,6 +234,69 @@ class SoundManager(private val context: Context) {
         }
     }
 
+    /**
+     * Soft, warm chime for Ritual Mode step completion
+     */
+    fun playGentleRitualCompleteSound() {
+        if (isMuted) return
+        audioScope.launch {
+            playGentleMediaTone(523.25f, 140, 0.4f) // C5
+            delay(110)
+            playGentleMediaTone(659.25f, 160, 0.45f) // E5
+            delay(120)
+            playGentleMediaTone(783.99f, 260, 0.5f) // G5
+        }
+    }
+
+    private fun playGentleMediaTone(freqHz: Float, durationMs: Int, volume: Float = 0.45f) {
+        try {
+            val sampleRate = 44100
+            val numSamples = (sampleRate * (durationMs / 1000.0)).toInt()
+            val generatedSnd = ByteArray(2 * numSamples)
+            var idx = 0
+
+            for (i in 0 until numSamples) {
+                val attack = (i / 400.0).coerceAtMost(1.0)
+                val release = ((numSamples - i).toDouble() / (numSamples * 0.65)).coerceIn(0.0, 1.0)
+                val envelope = attack * release
+                val angle = 2.0 * Math.PI * i / (sampleRate / freqHz)
+                val sampleVal = (sin(angle) * 32767 * volume * envelope).toInt().coerceIn(-32768, 32767).toShort()
+
+                generatedSnd[idx++] = (sampleVal.toInt() and 0x00ff).toByte()
+                generatedSnd[idx++] = ((sampleVal.toInt() and 0xff00) ushr 8).toByte()
+            }
+
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+
+            val audioFormat = AudioFormat.Builder()
+                .setSampleRate(sampleRate)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+
+            val track = AudioTrack(
+                audioAttributes,
+                audioFormat,
+                generatedSnd.size,
+                AudioTrack.MODE_STATIC,
+                AudioManager.AUDIO_SESSION_ID_GENERATE
+            )
+
+            track.write(generatedSnd, 0, generatedSnd.size)
+            track.play()
+            track.setNotificationMarkerPosition(numSamples)
+            track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
+                override fun onMarkerReached(t: AudioTrack?) {
+                    t?.release()
+                }
+                override fun onPeriodicNotification(t: AudioTrack?) {}
+            })
+        } catch (ignored: Exception) {}
+    }
+
     private fun playTone(freqHz: Float, durationMs: Int, volume: Float = 0.8f) {
         try {
             val sampleRate = 44100

@@ -47,8 +47,11 @@ interface TaskDao {
     @Query("SELECT * FROM daily_tasks WHERE date = :date ORDER BY isCompleted ASC, isRoutine DESC, priority DESC, id ASC")
     suspend fun getTasksForDateSync(date: String): List<DailyTask>
 
-    @Query("SELECT * FROM daily_tasks WHERE date < :today AND isCompleted = 0")
+    @Query("SELECT * FROM daily_tasks WHERE date < :today AND isCompleted = 0 AND isRoutine = 0")
     suspend fun getUnfinishedTasksBeforeDate(today: String): List<DailyTask>
+
+    @Query("SELECT * FROM daily_tasks ORDER BY id ASC")
+    suspend fun getAllTasksSync(): List<DailyTask>
 
     @Query("SELECT * FROM daily_tasks WHERE date >= :startDate AND date <= :endDate AND isCompleted = 1")
     fun getCompletedTasksBetweenDates(startDate: String, endDate: String): Flow<List<DailyTask>>
@@ -82,6 +85,9 @@ interface TaskDao {
 
     @Delete
     suspend fun deleteTask(task: DailyTask)
+
+    @Delete
+    suspend fun deleteTasks(tasks: List<DailyTask>)
 
     @Query("DELETE FROM daily_tasks WHERE id = :id")
     suspend fun deleteTaskById(id: Long)

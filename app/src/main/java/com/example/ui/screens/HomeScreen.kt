@@ -1,8 +1,13 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,20 +29,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DriveFileMove
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.NightsStay
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Spa
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,9 +51,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,11 +65,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
-import android.os.Build
-import android.provider.Settings
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -80,62 +82,97 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.CategoryItem
 import com.example.data.model.DailyTask
+import com.example.data.model.UserProfile
 import com.example.data.model.WeeklyGoal
 import com.example.ui.RiseViewModel
+import com.example.ui.components.RitualType
+import com.example.ui.components.TimeOfDaySkyHeader
+import com.example.ui.theme.CalmCardBorder
+import com.example.ui.theme.CalmCardSurface
+import com.example.ui.theme.CalmCardSurfaceWarm
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.GoldBright
-import com.example.ui.theme.GoldMuted
 import com.example.ui.theme.GoldPrimary
-import com.example.ui.theme.GoldSecondary
 import com.example.ui.theme.NavyBackground
 import com.example.ui.theme.NavyDarkest
 import com.example.ui.theme.NavySurface
 import com.example.ui.theme.NavySurfaceBorder
 import com.example.ui.theme.NavySurfaceElevated
-import com.example.ui.theme.NavySurfaceHighlight
+import com.example.ui.theme.PeachSoft
+import com.example.ui.theme.PeachWarm
+import com.example.ui.theme.SerifHeadingFontFamily
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextSilver
 import com.example.ui.theme.TextWhite
+import java.util.Calendar
+
+private enum class DayTab { TODAY, TOMORROW }
 
 @Composable
 fun HomeScreen(
     viewModel: RiseViewModel,
-    onNavigateWeeklyGoals: () -> Unit,
-    onNavigateShop: () -> Unit,
-    onNavigateProfile: () -> Unit
+    onStartRitual: (RitualType, List<DailyTask>) -> Unit,
+    onNavigateJourney: () -> Unit,
+    onNavigateMe: () -> Unit
 ) {
     val userProfile by viewModel.userProfile.collectAsState()
     val todayTasks by viewModel.todayTasks.collectAsState()
+    val tomorrowTasks by viewModel.tomorrowTasks.collectAsState()
     val weeklyGoals by viewModel.weeklyGoals.collectAsState()
     val categories by viewModel.categories.collectAsState()
-    val selectedCategory by viewModel.selectedCategoryFilter.collectAsState()
     val quoteOfTheDay by viewModel.quoteOfTheDay.collectAsState()
     val isSpeaking by viewModel.ttsManager.isSpeaking.collectAsState()
     val showMaxLimitDialog by viewModel.showMaxTaskLimitDialog.collectAsState()
     val alarmStatus by viewModel.alarmStatus.collectAsState()
-    val context = LocalContext.current
 
-    var showAddTaskDialog by remember { mutableStateOf(false) }
+    var selectedDayTab by remember { mutableStateOf(DayTab.TODAY) }
+    var showStatsDetailsDialog by remember { mutableStateOf(false) }
+    var addTaskTargetDate by remember { mutableStateOf<String?>(null) }
+    var editingTask by remember { mutableStateOf<DailyTask?>(null) }
+    var movingTask by remember { mutableStateOf<DailyTask?>(null) }
 
     val isBusyDay = userProfile?.busyDayMode == true
+    val isSunday = remember { Calendar.getInstance().get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY }
 
-    // Filter tasks based on Busy Day Mode and Category Filter
-    val filteredTasks = todayTasks.filter { task ->
-        val matchesBusy = if (isBusyDay) (task.isEssential || task.isRoutine) else true
-        val matchesCat = if (selectedCategory != null) task.categoryName == selectedCategory else true
-        matchesBusy && matchesCat
+    // Apply Busy Day filtering cleanly while preserving ritual classification
+    val visibleTodayTasks = remember(todayTasks, isBusyDay) {
+        if (isBusyDay) todayTasks.filter { it.isEssential || it.isRoutine } else todayTasks
     }
 
-    val routineTasks = filteredTasks.filter { it.isRoutine }
-    val customTasks = filteredTasks.filter { !it.isRoutine }
-    val customTaskCountTotal = todayTasks.count { !it.isRoutine }
+    // Morning Ritual: Devotion, After lectures, plus Tuesday Sermon 1 / Friday Sermon 2 on their day only
+    val morningTasks = remember(visibleTodayTasks) {
+        visibleTodayTasks.filter { task ->
+            (task.isRoutine && (task.title.contains("Devotion", ignoreCase = true) ||
+                    task.title.contains("After lectures", ignoreCase = true) ||
+                    task.title.contains("waking", ignoreCase = true))) ||
+                    task.scheduledDayOfWeek == Calendar.TUESDAY ||
+                    task.scheduledDayOfWeek == Calendar.FRIDAY
+        }
+    }
 
-    val completedCount = filteredTasks.count { it.isCompleted }
-    val totalCount = filteredTasks.size
-    val progressFloat = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
-    val animatedProgress by animateFloatAsState(targetValue = progressFloat, label = "progress")
+    // Evening Ritual: Read 10 pages, Submit daily report, plus Saturday voice note on Saturday only
+    val eveningTasks = remember(visibleTodayTasks) {
+        visibleTodayTasks.filter { task ->
+            (task.isRoutine && (task.title.contains("10 pages", ignoreCase = true) ||
+                    task.title.contains("daily report", ignoreCase = true) ||
+                    task.title.contains("Evening", ignoreCase = true) ||
+                    task.title.contains("Night", ignoreCase = true))) ||
+                    task.scheduledDayOfWeek == Calendar.SATURDAY
+        }
+    }
+
+    // My Day: Personal tasks only (max 5; never routine or weekly tasks)
+    val myDayTasks = remember(visibleTodayTasks) {
+        visibleTodayTasks.filter { !it.isRoutine && it.scheduledDayOfWeek == null }
+    }
+    val todayPersonalCount = remember(todayTasks) {
+        todayTasks.count { !it.isRoutine && it.scheduledDayOfWeek == null }
+    }
+    val tomorrowPersonalCount = remember(tomorrowTasks) {
+        tomorrowTasks.count { !it.isRoutine && it.scheduledDayOfWeek == null }
+    }
 
     Box(
         modifier = Modifier
@@ -143,528 +180,852 @@ fun HomeScreen(
             .background(NavyBackground)
     ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // 1. TOP GAMIFICATION BAR
+            // 1. TIME-OF-DAY SKY GRADIENT HERO HEADER
+            item {
+                TimeOfDaySkyHeader(
+                    userName = userProfile?.userName ?: "Emmanuel",
+                    quote = quoteOfTheDay,
+                    isSpeaking = isSpeaking,
+                    onToggleSpeak = {
+                        if (isSpeaking) viewModel.ttsManager.stop() else viewModel.speakMorningBriefing()
+                    },
+                    alarmHour = userProfile?.alarmHour ?: 7,
+                    alarmMinute = userProfile?.alarmMinute ?: 0,
+                    alarmStatus = alarmStatus
+                )
+            }
+
+            // 2. SINGLE COMPACT STATS ROW (Streak, Level, Coins) — Tap for details
+            item {
+                CompactStatsRow(
+                    streak = userProfile?.currentStreak ?: 1,
+                    level = userProfile?.level ?: 1,
+                    coins = userProfile?.coins ?: 0,
+                    onClick = { showStatsDetailsDialog = true },
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+            }
+
+            // 3. "TODAY | TOMORROW" SWITCH + BUSY DAY PILL
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Level Badge
                     Surface(
-                        onClick = onNavigateProfile,
-                        shape = RoundedCornerShape(16.dp),
-                        color = NavySurfaceElevated,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.5f)),
-                        modifier = Modifier.testTag("level_badge_chip")
+                        shape = RoundedCornerShape(50),
+                        color = CalmCardSurface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CalmCardBorder)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(GoldPrimary)
-                            ) {
-                                Text(
-                                    text = "${userProfile?.level ?: 1}",
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 13.sp,
-                                    color = NavyDarkest
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = (userProfile?.levelTitle ?: "Starter").uppercase(),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = GoldBright,
-                                letterSpacing = 1.sp
+                        Row(modifier = Modifier.padding(4.dp)) {
+                            DaySwitchPill(
+                                label = "Today",
+                                selected = selectedDayTab == DayTab.TODAY,
+                                onClick = { selectedDayTab = DayTab.TODAY },
+                                testTag = "tab_today_switch"
+                            )
+                            DaySwitchPill(
+                                label = "Tomorrow",
+                                selected = selectedDayTab == DayTab.TOMORROW,
+                                onClick = { selectedDayTab = DayTab.TOMORROW },
+                                testTag = "tab_tomorrow_switch"
                             )
                         }
                     }
 
-                    // Streak & Shield
-                    Surface(
-                        onClick = onNavigateProfile,
-                        shape = RoundedCornerShape(16.dp),
-                        color = NavySurfaceElevated,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange.copy(alpha = 0.5f)),
-                        modifier = Modifier.testTag("streak_chip")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocalFireDepartment,
-                                contentDescription = "Daily Streak",
-                                tint = FlameOrange,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${userProfile?.currentStreak ?: 1}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = FlameYellow
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = Icons.Default.Shield,
-                                contentDescription = "Streak Shield",
-                                tint = if (userProfile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-
-                    // Coins Balance
-                    Surface(
-                        onClick = onNavigateShop,
-                        shape = RoundedCornerShape(16.dp),
-                        color = NavySurfaceElevated,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoldSecondary.copy(alpha = 0.5f)),
-                        modifier = Modifier.testTag("coins_chip")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text("🪙", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "${userProfile?.coins ?: 0}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = GoldBright
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 2. HABIT TRAINER & BUSY DAY BAR
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Habit streak tracker
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = NavySurfaceElevated
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text("📋", fontSize = 14.sp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "List Master Streak: ${userProfile?.listCompletionStreak ?: 0} Days",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = GoldBright
-                            )
-                        }
-                    }
-
-                    // BUSY DAY TOGGLE BUTTON
+                    // Gentle Busy Day Toggle Pill
                     Surface(
                         onClick = { viewModel.toggleBusyDayMode() },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isBusyDay) FlameOrange else NavySurfaceElevated,
+                        shape = RoundedCornerShape(50),
+                        color = if (isBusyDay) PeachWarm.copy(alpha = 0.2f) else CalmCardSurface,
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
-                            if (isBusyDay) FlameYellow else NavySurfaceBorder
+                            if (isBusyDay) PeachWarm else CalmCardBorder
                         ),
-                        modifier = Modifier.testTag("busy_day_toggle_button")
+                        modifier = Modifier.testTag("busy_day_toggle")
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = if (isBusyDay) NavyDarkest else FlameYellow,
+                                imageVector = Icons.Rounded.Spa,
+                                contentDescription = "Busy Day Mode",
+                                tint = if (isBusyDay) PeachWarm else TextSilver,
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isBusyDay) "Busy Day: ON" else "Busy Day",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = if (isBusyDay) NavyDarkest else TextSilver
+                                text = if (isBusyDay) "Busy Day On" else "Busy Day",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (isBusyDay) PeachSoft else TextSilver,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
                 }
             }
 
-            // 3. MORNING ALARM & BRIEFING CARD (HERO FEATURE)
+            // 4. ANIMATED SWITCH BETWEEN TODAY RITUALS AND TOMORROW PLANNER
             item {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            1.5.dp,
-                            Brush.horizontalGradient(listOf(GoldPrimary, FlameOrange)),
-                            RoundedCornerShape(22.dp)
-                        )
-                        .testTag("morning_alarm_card")
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                AnimatedContent(
+                    targetState = selectedDayTab,
+                    transitionSpec = { fadeIn(tween(240)) togetherWith fadeOut(tween(180)) },
+                    label = "todayTomorrowSwitch"
+                ) { tab ->
+                    if (tab == DayTab.TODAY) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(GoldPrimary.copy(alpha = 0.2f))
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.WbSunny,
-                                        contentDescription = null,
-                                        tint = GoldPrimary,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "MORNING ALARM",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = GoldPrimary,
-                                        letterSpacing = 1.5.sp
-                                    )
-                                    val hour = userProfile?.alarmHour ?: 7
-                                    val minute = userProfile?.alarmMinute ?: 0
-                                    val timeStr = String.format("%02d:%02d %s", if (hour % 12 == 0) 12 else hour % 12, minute, if (hour >= 12) "PM" else "AM")
-                                    Text(
-                                        text = "$timeStr • Loud Real Alarm",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = TextWhite
-                                    )
-                                }
-                            }
+                            // RITUAL CARD 1: MORNING RITUAL
+                            val morningDone = morningTasks.count { it.isCompleted }
+                            val morningTotal = morningTasks.size
+                            RitualCard(
+                                title = "Morning Ritual",
+                                subtitle = "Devotion, prayer & morning foundations",
+                                emoji = "🌅",
+                                accentColor = PeachWarm,
+                                completedCount = morningDone,
+                                totalCount = morningTotal,
+                                tasks = morningTasks,
+                                initiallyExpanded = morningDone < morningTotal,
+                                onStartClick = { onStartRitual(RitualType.MORNING, morningTasks) },
+                                onToggleTask = { viewModel.toggleTask(it) },
+                                onEditTask = { if (!it.isRoutine && it.scheduledDayOfWeek == null) editingTask = it },
+                                onMoveTask = { if (!it.isRoutine && it.scheduledDayOfWeek == null) movingTask = it },
+                                onDeleteTask = { if (!it.isRoutine && it.scheduledDayOfWeek == null) viewModel.deleteTask(it) },
+                                testTag = "morning_ritual_card"
+                            )
 
-                            IconButton(
-                                onClick = {
-                                    if (isSpeaking) {
-                                        viewModel.ttsManager.stop()
+                            // RITUAL CARD 2: MY DAY (Maximum 5 personal tasks)
+                            val myDayDone = myDayTasks.count { it.isCompleted }
+                            val myDayTotal = myDayTasks.size
+                            RitualCard(
+                                title = "My Day",
+                                subtitle = "$todayPersonalCount / 5 personal tasks",
+                                emoji = "☀️",
+                                accentColor = GoldPrimary,
+                                completedCount = myDayDone,
+                                totalCount = myDayTotal,
+                                tasks = myDayTasks,
+                                initiallyExpanded = true,
+                                emptyMessage = "Keep your day calm and winnable — add up to 5 priorities.",
+                                headerActionLabel = "+ Add",
+                                onHeaderAction = {
+                                    if (todayPersonalCount >= 5) {
+                                        viewModel.triggerMaxTaskLimitDialog()
                                     } else {
-                                        viewModel.speakMorningBriefing()
+                                        addTaskTargetDate = viewModel.todayDateString
                                     }
                                 },
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .background(NavySurfaceElevated)
-                                    .testTag("home_tts_speak_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
-                                    contentDescription = "Speak Briefing",
-                                    tint = if (isSpeaking) FlameOrange else GoldPrimary
-                                )
-                            }
-                        }
+                                onStartClick = { onStartRitual(RitualType.MY_DAY, myDayTasks) },
+                                onToggleTask = { viewModel.toggleTask(it) },
+                                onEditTask = { editingTask = it },
+                                onMoveTask = { movingTask = it },
+                                onDeleteTask = { viewModel.deleteTask(it) },
+                                testTag = "my_day_ritual_card"
+                            )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                            // RITUAL CARD 3: EVENING RITUAL (Includes 10 pages, daily report, Saturday voice note, Evening Check-In)
+                            val eveningCheckInCompleted = userProfile?.lastMorningAudioGeneratedForDate == viewModel.tomorrowDateString
+                            val eveningDone = eveningTasks.count { it.isCompleted } + (if (eveningCheckInCompleted) 1 else 0)
+                            val eveningTotal = eveningTasks.size + 1
+                            RitualCard(
+                                title = "Evening Ritual",
+                                subtitle = "10 pages, daily report & evening check-in",
+                                emoji = "🌙",
+                                accentColor = Color(0xFF9F8FEF),
+                                completedCount = eveningDone,
+                                totalCount = eveningTotal,
+                                tasks = eveningTasks,
+                                initiallyExpanded = morningDone >= morningTotal,
+                                extraFooterLabel = "Evening Check-in & Reflection",
+                                extraFooterCompleted = eveningCheckInCompleted,
+                                onExtraFooterClick = { viewModel.openEveningCheckIn() },
+                                onStartClick = { onStartRitual(RitualType.EVENING, eveningTasks) },
+                                onToggleTask = { viewModel.toggleTask(it) },
+                                onEditTask = { if (!it.isRoutine && it.scheduledDayOfWeek == null) editingTask = it },
+                                onMoveTask = { if (!it.isRoutine && it.scheduledDayOfWeek == null) movingTask = it },
+                                onDeleteTask = { if (!it.isRoutine && it.scheduledDayOfWeek == null) viewModel.deleteTask(it) },
+                                testTag = "evening_ritual_card"
+                            )
 
-                        // 4. CLEAR ALARM STATUS
-                        if (alarmStatus.isScheduled) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(EmeraldSuccess.copy(alpha = 0.12f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Box(
+                            // Gentle Sunday Review whisper when it's Sunday
+                            if (isSunday) {
+                                Surface(
+                                    onClick = { viewModel.openSundayCheckIn() },
+                                    shape = RoundedCornerShape(24.dp),
+                                    color = CalmCardSurfaceWarm,
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.4f)),
                                     modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(EmeraldSuccess)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Alarm set for ${alarmStatus.formattedTime ?: "tomorrow"}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = EmeraldSuccess,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                        } else if (alarmStatus.needsPermissionFix) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFFF5252).copy(alpha = 0.12f))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                                        .fillMaxWidth()
+                                        .testTag("sunday_checkin_banner")
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFFFF5252))
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Alarm NOT set: permission needed",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFFFF5252),
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                                TextButton(
-                                    onClick = {
-                                        if (!alarmStatus.canScheduleExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                                data = Uri.parse("package:${context.packageName}")
-                                            }
-                                            context.startActivity(intent)
-                                        } else if (!alarmStatus.canUseFullScreen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                                                data = Uri.parse("package:${context.packageName}")
-                                            }
-                                            context.startActivity(intent)
-                                        } else {
-                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                                data = Uri.parse("package:${context.packageName}")
-                                            }
-                                            context.startActivity(intent)
+                                    Row(
+                                        modifier = Modifier.padding(18.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Sunday Night Check-in",
+                                                fontFamily = SerifHeadingFontFamily,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 18.sp,
+                                                color = GoldBright
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Reflect on your week & claim +200 XP",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSilver
+                                            )
                                         }
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text("Fix", color = GoldPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
-
-                        // Quote & Today's Question
-                        quoteOfTheDay?.let { quote ->
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = NavySurfaceElevated,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = "“${quote.text}” — ${quote.author}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = TextWhite,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = "Focus Question: ${userProfile?.morningWinQuestion}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = FlameYellow,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                        Icon(
+                                            imageVector = Icons.Rounded.ChevronRight,
+                                            contentDescription = "Open Sunday Check-in",
+                                            tint = GoldPrimary
+                                        )
+                                    }
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Button(
-                                onClick = { viewModel.testAlarmNow() },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = GoldPrimary,
-                                    contentColor = NavyDarkest
-                                ),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                                    .testTag("test_alarm_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Alarm,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Test Alarm (Loud)",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            }
-
-                            Button(
-                                onClick = onNavigateProfile,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = NavySurfaceElevated,
-                                    contentColor = TextWhite
-                                ),
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                            ) {
-                                Text(
-                                    text = "Voice & Settings",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
+                    } else {
+                        // TOMORROW VIEW: Plan, edit, delete, and move tasks cleanly
+                        TomorrowPlannerSection(
+                            tomorrowTasks = tomorrowTasks,
+                            tomorrowPersonalCount = tomorrowPersonalCount,
+                            onAddClick = { addTaskTargetDate = viewModel.tomorrowDateString },
+                            onEditTask = { editingTask = it },
+                            onDeleteTask = { viewModel.deleteTask(it) },
+                            onMoveTask = { movingTask = it }
+                        )
                     }
                 }
             }
+        }
+    }
 
-            // 4. CATEGORY FILTER CHIPS
-            item {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+    // Compact Stats Details Dialog (triggered by tapping the Streak/Level/Coins row)
+    if (showStatsDetailsDialog) {
+        StatsDetailsDialog(
+            profile = userProfile,
+            onDismiss = { showStatsDetailsDialog = false },
+            onToggleBusyDay = { viewModel.toggleBusyDayMode() },
+            onOpenEveningCheckIn = {
+                showStatsDetailsDialog = false
+                viewModel.openEveningCheckIn()
+            },
+            onOpenSundayCheckIn = {
+                showStatsDetailsDialog = false
+                viewModel.openSundayCheckIn()
+            },
+            onNavigateMe = {
+                showStatsDetailsDialog = false
+                onNavigateMe()
+            }
+        )
+    }
+
+    // Add Task Dialog (works for Today or Tomorrow)
+    addTaskTargetDate?.let { targetDate ->
+        AddOrEditTaskDialog(
+            initialTask = null,
+            targetLabel = if (targetDate == viewModel.tomorrowDateString) "Tomorrow" else "Today",
+            weeklyGoals = weeklyGoals,
+            categories = categories,
+            onDismiss = { addTaskTargetDate = null },
+            onConfirm = { title, notes, weeklyGoalId, category, priority, isEssential ->
+                viewModel.addTaskForDate(
+                    date = targetDate,
+                    title = title,
+                    notes = notes,
+                    weeklyGoalId = weeklyGoalId,
+                    category = category,
+                    priority = priority,
+                    isEssential = isEssential
+                )
+                addTaskTargetDate = null
+            }
+        )
+    }
+
+    // Edit Task Dialog
+    editingTask?.let { taskToEdit ->
+        AddOrEditTaskDialog(
+            initialTask = taskToEdit,
+            targetLabel = if (taskToEdit.date == viewModel.tomorrowDateString) "Tomorrow" else "Today",
+            weeklyGoals = weeklyGoals,
+            categories = categories,
+            onDismiss = { editingTask = null },
+            onConfirm = { title, notes, weeklyGoalId, category, priority, isEssential ->
+                viewModel.updateTaskDetails(
+                    task = taskToEdit,
+                    title = title,
+                    notes = notes,
+                    category = category,
+                    priority = priority,
+                    isEssential = isEssential,
+                    weeklyGoalId = weeklyGoalId
+                )
+                editingTask = null
+            }
+        )
+    }
+
+    // Move Task Dialog (Move to Today, Tomorrow, or Day After Tomorrow)
+    movingTask?.let { taskToMove ->
+        MoveTaskDialog(
+            task = taskToMove,
+            todayDate = viewModel.todayDateString,
+            tomorrowDate = viewModel.tomorrowDateString,
+            dayAfterDate = viewModel.dayAfterTomorrowDateString,
+            onDismiss = { movingTask = null },
+            onMoveTo = { targetDate ->
+                viewModel.moveTaskToDate(taskToMove, targetDate)
+                movingTask = null
+            }
+        )
+    }
+
+    // Gentle 5-Task Limit Dialog
+    if (showMaxLimitDialog) {
+        MaxTaskLimitGentleDialog(onDismiss = { viewModel.dismissMaxTaskLimitDialog() })
+    }
+}
+
+@Composable
+private fun CompactStatsRow(
+    streak: Int,
+    level: Int,
+    coins: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        color = CalmCardSurface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, CalmCardBorder),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("compact_stats_row")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔥", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${streak}d streak",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = PeachSoft
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(16.dp)
+                    .background(CalmCardBorder)
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("⚡", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Lv. $level",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextWhite
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(16.dp)
+                    .background(CalmCardBorder)
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🪙", fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "$coins",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = GoldBright
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DaySwitchPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    testTag: String
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = if (selected) GoldPrimary else Color.Transparent,
+        modifier = Modifier.testTag(testTag)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) NavyDarkest else TextSilver,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun RitualCard(
+    title: String,
+    subtitle: String,
+    emoji: String,
+    accentColor: Color,
+    completedCount: Int,
+    totalCount: Int,
+    tasks: List<DailyTask>,
+    initiallyExpanded: Boolean,
+    emptyMessage: String = "Everything is peacefully aligned here.",
+    headerActionLabel: String? = null,
+    onHeaderAction: (() -> Unit)? = null,
+    extraFooterLabel: String? = null,
+    extraFooterCompleted: Boolean = false,
+    onExtraFooterClick: (() -> Unit)? = null,
+    onStartClick: () -> Unit,
+    onToggleTask: (DailyTask) -> Unit,
+    onEditTask: (DailyTask) -> Unit,
+    onMoveTask: (DailyTask) -> Unit,
+    onDeleteTask: (DailyTask) -> Unit,
+    testTag: String
+) {
+    var expanded by remember(initiallyExpanded) { mutableStateOf(initiallyExpanded) }
+    val progress = if (totalCount > 0) (completedCount.toFloat() / totalCount).coerceIn(0f, 1f) else 0f
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(550),
+        label = "ritualRingProgress"
+    )
+    val allDone = totalCount > 0 && completedCount >= totalCount
+
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(CalmCardSurfaceWarm, CalmCardSurface)
+                )
+            )
+            .border(
+                1.dp,
+                if (allDone) EmeraldSuccess.copy(alpha = 0.45f) else accentColor.copy(alpha = 0.28f),
+                RoundedCornerShape(24.dp)
+            )
+            .testTag(testTag)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { expanded = !expanded }
+                ) {
+                    // Progress Ring
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(56.dp)
                     ) {
-                        Text(
-                            text = "Categories",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-                        if (selectedCategory != null) {
-                            Text(
-                                text = "Clear filter",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = GoldPrimary,
-                                modifier = Modifier.clickable { viewModel.setCategoryFilter(null) }
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 5.dp.toPx()
+                            drawArc(
+                                color = Color.White.copy(alpha = 0.1f),
+                                startAngle = -90f,
+                                sweepAngle = 360f,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                            )
+                            drawArc(
+                                color = if (allDone) EmeraldSuccess else accentColor,
+                                startAngle = -90f,
+                                sweepAngle = 360f * animatedProgress,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                             )
                         }
+                        Text(text = emoji, fontSize = 22.sp)
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.width(14.dp))
 
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item {
-                            Surface(
-                                onClick = { viewModel.setCategoryFilter(null) },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (selectedCategory == null) GoldPrimary else NavySurfaceElevated
-                            ) {
-                                Text(
-                                    text = "All",
-                                    color = if (selectedCategory == null) NavyDarkest else TextSilver,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-
-                        items(categories) { cat ->
-                            val isSelected = selectedCategory == cat.name
-                            val catColor = try {
-                                Color(android.graphics.Color.parseColor(cat.colorHex))
-                            } catch (e: Exception) {
-                                GoldPrimary
-                            }
-
-                            Surface(
-                                onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat.name) },
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) catColor else NavySurfaceElevated,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, catColor.copy(alpha = 0.5f))
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                ) {
-                                    Text(cat.iconEmoji, fontSize = 12.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = cat.name,
-                                        color = if (isSelected) NavyDarkest else TextWhite,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 5. DAILY ROUTINE SECTION (RECURRING EVERY DAY)
-            if (routineTasks.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Repeat,
-                            contentDescription = null,
-                            tint = GoldPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                    Column {
                         Text(
-                            text = "Daily Routine (${routineTasks.count { it.isCompleted }}/${routineTasks.size})",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = title,
+                            fontFamily = SerifHeadingFontFamily,
                             fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
                             color = TextWhite
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSilver
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = if (allDone) "Completed ($completedCount/$totalCount)"
+                            else "$completedCount of $totalCount done",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (allDone) EmeraldSuccess else accentColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
-                items(routineTasks, key = { it.id }) { task ->
-                    DailyTaskCard(
-                        task = task,
-                        linkedGoal = null,
-                        onToggle = { viewModel.toggleTask(task) },
-                        onDelete = { viewModel.deleteTask(task) }
+                // Start Button (launches full-screen guided Ritual Mode)
+                Button(
+                    onClick = onStartClick,
+                    enabled = tasks.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (allDone) NavySurfaceElevated else GoldPrimary,
+                        contentColor = if (allDone) TextWhite else NavyDarkest,
+                        disabledContainerColor = NavySurfaceElevated.copy(alpha = 0.5f),
+                        disabledContentColor = TextMuted
+                    ),
+                    shape = RoundedCornerShape(50),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .height(44.dp)
+                        .testTag("${testTag}_start_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (allDone) "Review" else "Start",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
 
-            // 6. TODAY'S TASKS LIST HEADER (5 TASKS MAX)
-            item {
+            // Expand/Collapse & Header Action Row
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { expanded = !expanded }
+                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        contentDescription = if (expanded) "Hide tasks" else "Show tasks",
+                        tint = TextMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (expanded) "Hide steps" else "View ${tasks.size} steps",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                }
+
+                if (headerActionLabel != null && onHeaderAction != null) {
+                    Surface(
+                        onClick = onHeaderAction,
+                        shape = RoundedCornerShape(50),
+                        color = accentColor.copy(alpha = 0.16f),
+                        modifier = Modifier.testTag("add_personal_task_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = "Add Task",
+                                tint = accentColor,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = headerActionLabel.removePrefix("+ "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = accentColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (tasks.isEmpty()) {
+                        Text(
+                            text = emptyMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                    } else {
+                        tasks.forEach { task ->
+                            CompactRitualTaskRow(
+                                task = task,
+                                allowModify = !task.isRoutine && task.scheduledDayOfWeek == null,
+                                onToggle = { onToggleTask(task) },
+                                onEdit = { onEditTask(task) },
+                                onMove = { onMoveTask(task) },
+                                onDelete = { onDeleteTask(task) }
+                            )
+                        }
+                    }
+
+                    if (extraFooterLabel != null && onExtraFooterClick != null) {
+                        Surface(
+                            onClick = onExtraFooterClick,
+                            shape = RoundedCornerShape(16.dp),
+                            color = NavySurfaceElevated.copy(alpha = 0.7f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (extraFooterCompleted) EmeraldSuccess.copy(alpha = 0.4f) else PeachSoft.copy(alpha = 0.25f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("evening_checkin_banner")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.NightsStay,
+                                        contentDescription = null,
+                                        tint = if (extraFooterCompleted) EmeraldSuccess else PeachSoft,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = extraFooterLabel,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (extraFooterCompleted) EmeraldSuccess else TextWhite
+                                    )
+                                }
+                                Icon(
+                                    imageVector = if (extraFooterCompleted) Icons.Rounded.Check else Icons.Rounded.ChevronRight,
+                                    contentDescription = null,
+                                    tint = if (extraFooterCompleted) EmeraldSuccess else TextSilver,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactRitualTaskRow(
+    task: DailyTask,
+    allowModify: Boolean,
+    onToggle: () -> Unit,
+    onEdit: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val catColor = remember(task.categoryColor) {
+        try {
+            Color(android.graphics.Color.parseColor(task.categoryColor))
+        } catch (e: Exception) {
+            GoldPrimary
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (task.isCompleted) NavyDarkest.copy(alpha = 0.4f) else NavySurfaceElevated.copy(alpha = 0.65f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .testTag("task_item_${task.id}")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(if (task.isCompleted) EmeraldSuccess else Color.Transparent)
+                    .border(
+                        1.5.dp,
+                        if (task.isCompleted) EmeraldSuccess else catColor.copy(alpha = 0.7f),
+                        CircleShape
+                    )
+            ) {
+                if (task.isCompleted) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = "Done",
+                        tint = NavyDarkest,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (task.isCompleted) FontWeight.Normal else FontWeight.Medium,
+                    color = if (task.isCompleted) TextMuted else TextWhite,
+                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 3.dp)
+                ) {
+                    Text(
+                        text = task.categoryName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = catColor
+                    )
+                    if (task.isMovedFromPreviousDay) {
+                        Surface(
+                            color = PeachWarm.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "moved",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = PeachWarm,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                    if (task.scheduledDayOfWeek != null) {
+                        Surface(
+                            color = GoldPrimary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "weekly",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = GoldBright,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (allowModify) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.Edit,
+                        contentDescription = "Edit task",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                IconButton(onClick = onMove, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.DriveFileMove,
+                        contentDescription = "Move task",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Rounded.DeleteOutline,
+                        contentDescription = "Delete task",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TomorrowPlannerSection(
+    tomorrowTasks: List<DailyTask>,
+    tomorrowPersonalCount: Int,
+    onAddClick: () -> Unit,
+    onEditTask: (DailyTask) -> Unit,
+    onDeleteTask: (DailyTask) -> Unit,
+    onMoveTask: (DailyTask) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = CalmCardSurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, CalmCardBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -672,305 +1033,295 @@ fun HomeScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Today's Tasks (${customTaskCountTotal}/5 max)",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "Tomorrow's Plan",
+                            fontFamily = SerifHeadingFontFamily,
                             fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
                             color = TextWhite
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Capped at 5 so your day is always winnable",
+                            text = "$tomorrowPersonalCount / 5 personal tasks planned",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
+                            color = PeachSoft
                         )
                     }
-
-                    Surface(
-                        onClick = { showAddTaskDialog = true },
-                        shape = RoundedCornerShape(12.dp),
-                        color = GoldPrimary,
-                        modifier = Modifier.testTag("quick_add_goal_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = null,
-                                tint = NavyDarkest,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Add Task",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = NavyDarkest
-                            )
-                        }
-                    }
                 }
-            }
 
-            // Custom Tasks items
-            if (customTasks.isEmpty()) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = NavySurface),
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (tomorrowTasks.isEmpty()) {
+                    Surface(
                         shape = RoundedCornerShape(18.dp),
+                        color = NavySurfaceElevated.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
+                            modifier = Modifier.padding(22.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("🎯", fontSize = 32.sp)
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("🌤️", fontSize = 28.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = if (isBusyDay) "Busy Day Mode active" else "No extra tasks for today",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TextWhite
+                                text = "A clear canvas for tomorrow",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = TextWhite,
+                                fontWeight = FontWeight.SemiBold
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = if (isBusyDay) "Only essential routine tasks are shown." else "Tap '+ Add Task' above (up to 5 max) to win your day!",
+                                text = "Add up to 5 priorities so tomorrow morning begins with calm intention.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = TextSilver,
+                                color = TextMuted,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        tomorrowTasks.forEach { task ->
+                            val catColor = remember(task.categoryColor) {
+                                try {
+                                    Color(android.graphics.Color.parseColor(task.categoryColor))
+                                } catch (e: Exception) {
+                                    GoldPrimary
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = NavySurfaceElevated.copy(alpha = 0.7f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onEditTask(task) }
+                                    .testTag("tomorrow_task_${task.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = task.title,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = TextWhite
+                                        )
+                                        if (task.notes.isNotBlank()) {
+                                            Text(
+                                                text = task.notes,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = TextSilver,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "${task.categoryName} • +${task.xpReward} XP",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = catColor
+                                        )
+                                    }
+
+                                    IconButton(onClick = { onEditTask(task) }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Edit,
+                                            contentDescription = "Edit Tomorrow Task",
+                                            tint = GoldBright,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { onMoveTask(task) }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DriveFileMove,
+                                            contentDescription = "Move Tomorrow Task",
+                                            tint = PeachWarm,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { onDeleteTask(task) }) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.DeleteOutline,
+                                            contentDescription = "Delete Tomorrow Task",
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                items(customTasks, key = { it.id }) { task ->
-                    val linkedGoal = weeklyGoals.find { it.id == task.weeklyGoalId }
-                    DailyTaskCard(
-                        task = task,
-                        linkedGoal = linkedGoal,
-                        onToggle = { viewModel.toggleTask(task) },
-                        onDelete = { viewModel.deleteTask(task) }
-                    )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // One main button in Tomorrow view
+                Button(
+                    onClick = onAddClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GoldPrimary,
+                        contentColor = NavyDarkest
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .testTag("add_tomorrow_task_button")
+                ) {
+                    Icon(imageVector = Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Plan a Task for Tomorrow", fontWeight = FontWeight.Bold)
                 }
             }
+        }
+    }
+}
 
-            // 7. SUNDAY NIGHT CHECK-IN CARD & EVENING REFLECTION BANNER
-            item {
+@Composable
+private fun StatsDetailsDialog(
+    profile: UserProfile?,
+    onDismiss: () -> Unit,
+    onToggleBusyDay: () -> Unit,
+    onOpenEveningCheckIn: () -> Unit,
+    onOpenSundayCheckIn: () -> Unit,
+    onNavigateMe: () -> Unit
+) {
+    val level = profile?.level ?: 1
+    val xp = profile?.xp ?: 0
+    val (minXp, maxXp) = when (level) {
+        1 -> Pair(0, 150)
+        2 -> Pair(150, 350)
+        3 -> Pair(350, 700)
+        4 -> Pair(700, 1200)
+        5 -> Pair(1200, 2000)
+        6 -> Pair(2000, 3000)
+        7 -> Pair(3000, 4500)
+        else -> Pair(4500, 6000)
+    }
+    val levelProgress = ((xp - minXp).toFloat() / (maxXp - minXp).coerceAtLeast(1)).coerceIn(0f, 1f)
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = NavySurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, PeachSoft.copy(alpha = 0.35f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(22.dp)) {
+                Text(
+                    text = "Your Progress",
+                    fontFamily = SerifHeadingFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 24.sp,
+                    color = TextWhite
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Level $level • ${profile?.levelTitle ?: "Starter"}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = GoldBright
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LinearProgressIndicator(
+                    progress = { levelProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(50)),
+                    color = GoldPrimary,
+                    trackColor = NavySurfaceElevated,
+                    strokeCap = StrokeCap.Round
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "$xp / $maxXp XP to next level • ${profile?.coins ?: 0} 🪙 coins",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSilver
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = NavySurfaceElevated,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Daily Streak", style = MaterialTheme.typography.bodyMedium, color = TextSilver)
+                            Text("🔥 ${profile?.currentStreak ?: 1} days (Best: ${profile?.highestStreak ?: 1})", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = PeachSoft)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("To-Do List Streak", style = MaterialTheme.typography.bodyMedium, color = TextSilver)
+                            Text("📋 ${profile?.listCompletionStreak ?: 0} days", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = GoldBright)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Weekly Streak Shield", style = MaterialTheme.typography.bodyMedium, color = TextSilver)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Rounded.Shield, contentDescription = null, tint = if (profile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (profile?.streakShieldAvailable == true) "Ready" else "Used",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (profile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Card(
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = NavySurfaceElevated),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { viewModel.openEveningCheckIn() }
-                            .border(1.dp, FlameOrange.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
-                            .testTag("evening_checkin_banner")
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("🌙 Evening Check-in", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = FlameYellow)
-                            Text("Score today & plan", style = MaterialTheme.typography.bodySmall, color = TextSilver)
-                        }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Busy Day Mode", style = MaterialTheme.typography.titleSmall, color = TextWhite)
+                        Text("Show only essentials & keep streak", style = MaterialTheme.typography.bodySmall, color = TextMuted)
                     }
-
-                    Card(
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = NavySurfaceElevated),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { viewModel.openSundayCheckIn() }
-                            .border(1.dp, GoldPrimary.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
-                            .testTag("sunday_checkin_banner")
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text("🧭 Sunday Review", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = GoldBright)
-                            Text("+200 XP Bounty", style = MaterialTheme.typography.bodySmall, color = EmeraldSuccess)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add Task Dialog
-        if (showAddTaskDialog) {
-            AddTaskWithCategoriesDialog(
-                weeklyGoals = weeklyGoals,
-                categories = categories,
-                onDismiss = { showAddTaskDialog = false },
-                onConfirm = { title, notes, weeklyGoalId, category, priority, isEssential ->
-                    viewModel.addTask(title, notes, weeklyGoalId, category, priority, isEssential)
-                    showAddTaskDialog = false
-                }
-            )
-        }
-
-        // Gentle 5-Task Limit Dialog
-        if (showMaxLimitDialog) {
-            MaxTaskLimitGentleDialog(onDismiss = { viewModel.dismissMaxTaskLimitDialog() })
-        }
-    }
-}
-
-@Composable
-fun DailyTaskCard(
-    task: DailyTask,
-    linkedGoal: WeeklyGoal?,
-    onToggle: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val isCompleted = task.isCompleted
-    val animBgColor by animateColorAsState(
-        targetValue = if (isCompleted) NavySurfaceElevated.copy(alpha = 0.7f) else NavySurface,
-        label = "taskBg"
-    )
-
-    val catColor = try {
-        Color(android.graphics.Color.parseColor(task.categoryColor))
-    } catch (e: Exception) {
-        GoldPrimary
-    }
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = animBgColor),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle() }
-            .border(
-                1.dp,
-                if (isCompleted) EmeraldSuccess.copy(alpha = 0.4f) else NavySurfaceBorder,
-                RoundedCornerShape(16.dp)
-            )
-            .testTag("task_item_${task.id}")
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(if (isCompleted) EmeraldSuccess else NavySurfaceElevated)
-                        .border(2.dp, if (isCompleted) EmeraldSuccess else GoldMuted, CircleShape)
-                        .clickable { onToggle() }
-                ) {
-                    if (isCompleted) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Completed",
-                            tint = NavyDarkest,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = task.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = if (isCompleted) FontWeight.Normal else FontWeight.SemiBold,
-                            color = if (isCompleted) TextMuted else TextWhite,
-                            textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Category chip
-                        Surface(
-                            color = catColor.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = task.categoryName,
-                                color = catColor,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-
-                        // Moved tag
-                        if (task.isMovedFromPreviousDay) {
-                            Surface(
-                                color = FlameOrange.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = "Moved",
-                                    color = FlameYellow,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        // Routine badge
-                        if (task.isRoutine) {
-                            Surface(
-                                color = GoldPrimary.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(6.dp)
-                            ) {
-                                Text(
-                                    text = "Routine",
-                                    color = GoldBright,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    color = GoldPrimary.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        text = "+${task.xpReward} XP",
-                        color = GoldBright,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    Switch(
+                        checked = profile?.busyDayMode == true,
+                        onCheckedChange = { onToggleBusyDay() },
+                        colors = SwitchDefaults.colors(checkedThumbColor = NavyDarkest, checkedTrackColor = PeachWarm)
                     )
                 }
 
-                if (!task.isRoutine) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(30.dp)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(
+                        onClick = onOpenEveningCheckIn,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = TextMuted.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Text("Evening Check-in", fontSize = 12.sp, color = PeachSoft)
                     }
+                    OutlinedButton(
+                        onClick = onOpenSundayCheckIn,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Sunday Review", fontSize = 12.sp, color = GoldBright)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Button(
+                    onClick = onNavigateMe,
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Text("Visit Rewards Shop & Me", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -978,18 +1329,24 @@ fun DailyTaskCard(
 }
 
 @Composable
-fun AddTaskWithCategoriesDialog(
+fun AddOrEditTaskDialog(
+    initialTask: DailyTask?,
+    targetLabel: String,
     weeklyGoals: List<WeeklyGoal>,
     categories: List<CategoryItem>,
     onDismiss: () -> Unit,
     onConfirm: (title: String, notes: String, weeklyGoalId: Long?, category: CategoryItem, priority: Int, isEssential: Boolean) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var notes by remember { mutableStateOf("") }
-    var selectedGoalId by remember { mutableStateOf<Long?>(null) }
-    var selectedCategory by remember { mutableStateOf(categories.firstOrNull() ?: CategoryItem(name = "Personal", colorHex = "#06B6D4", iconEmoji = "🌿")) }
-    var priority by remember { mutableIntStateOf(1) }
-    var isEssential by remember { mutableStateOf(false) }
+    val defaultCat = categories.find { it.name == initialTask?.categoryName }
+        ?: categories.firstOrNull()
+        ?: CategoryItem(name = "Personal", colorHex = "#06B6D4", iconEmoji = "🌿")
+
+    var title by remember { mutableStateOf(initialTask?.title ?: "") }
+    var notes by remember { mutableStateOf(initialTask?.notes ?: "") }
+    var selectedGoalId by remember { mutableStateOf(initialTask?.weeklyGoalId) }
+    var selectedCategory by remember { mutableStateOf(defaultCat) }
+    var priority by remember { mutableIntStateOf(initialTask?.priority ?: 2) }
+    var isEssential by remember { mutableStateOf(initialTask?.isEssential ?: false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -997,7 +1354,7 @@ fun AddTaskWithCategoriesDialog(
             colors = CardDefaults.cardColors(containerColor = NavySurface),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.5.dp, GoldPrimary, RoundedCornerShape(24.dp))
+                .border(1.dp, PeachSoft.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -1005,13 +1362,14 @@ fun AddTaskWithCategoriesDialog(
                     .padding(22.dp)
             ) {
                 Text(
-                    text = "Add Daily Goal 🎯",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = GoldPrimary
+                    text = if (initialTask == null) "Plan for $targetLabel" else "Edit Task",
+                    fontFamily = SerifHeadingFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    color = GoldBright
                 )
                 Text(
-                    text = "Limit: 5 tasks max per day to keep your list winnable.",
+                    text = "Up to 5 personal tasks keep your day peaceful and winnable.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSilver
                 )
@@ -1021,7 +1379,26 @@ fun AddTaskWithCategoriesDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("What will you conquer?", color = TextMuted) },
+                    label = { Text("Task title", color = TextMuted) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldPrimary,
+                        unfocusedBorderColor = NavySurfaceBorder,
+                        focusedTextColor = TextWhite,
+                        unfocusedTextColor = TextWhite,
+                        focusedContainerColor = NavySurfaceElevated,
+                        unfocusedContainerColor = NavySurfaceElevated
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Notes (optional)", color = TextMuted) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GoldPrimary,
@@ -1037,20 +1414,19 @@ fun AddTaskWithCategoriesDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Category Selector
-                Text("Select Category:", style = MaterialTheme.typography.labelSmall, color = TextSilver)
+                Text("Category:", style = MaterialTheme.typography.labelSmall, color = TextSilver)
                 Spacer(modifier = Modifier.height(6.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(categories) { cat ->
                         val isSel = selectedCategory.id == cat.id || selectedCategory.name == cat.name
                         Surface(
                             onClick = { selectedCategory = cat },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(50),
                             color = if (isSel) GoldPrimary else NavySurfaceElevated
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(cat.iconEmoji, fontSize = 12.sp)
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -1065,9 +1441,32 @@ fun AddTaskWithCategoriesDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (weeklyGoals.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Link to Weekly Goal (optional):", style = MaterialTheme.typography.labelSmall, color = TextSilver)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(weeklyGoals) { goal ->
+                            val isSel = selectedGoalId == goal.id
+                            Surface(
+                                onClick = { selectedGoalId = if (isSel) null else goal.id },
+                                shape = RoundedCornerShape(50),
+                                color = if (isSel) PeachWarm else NavySurfaceElevated
+                            ) {
+                                Text(
+                                    text = goal.title,
+                                    color = if (isSel) NavyDarkest else TextSilver,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
 
-                // Essential for Busy Day checkbox
+                Spacer(modifier = Modifier.height(10.dp))
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.clickable { isEssential = !isEssential }
@@ -1081,27 +1480,26 @@ fun AddTaskWithCategoriesDialog(
                             uncheckedColor = TextMuted
                         )
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Mark as essential (visible on Busy Days)",
+                        text = "Essential (always shown on Busy Days)",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextWhite
                     )
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Button(
+                    OutlinedButton(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = NavySurfaceElevated, contentColor = TextSilver),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", color = TextSilver)
                     }
 
                     Button(
@@ -1111,11 +1509,84 @@ fun AddTaskWithCategoriesDialog(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
-                        Text("Add Task ⚡", fontWeight = FontWeight.Black)
+                        Text(if (initialTask == null) "Save" else "Update", fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoveTaskDialog(
+    task: DailyTask,
+    todayDate: String,
+    tomorrowDate: String,
+    dayAfterDate: String,
+    onDismiss: () -> Unit,
+    onMoveTo: (String) -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = NavySurface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, PeachSoft.copy(alpha = 0.45f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(22.dp)) {
+                Text(
+                    text = "Move Task",
+                    fontFamily = SerifHeadingFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    color = GoldBright
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextWhite
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (task.date != todayDate) {
+                    Button(
+                        onClick = { onMoveTo(todayDate) },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Move to Today", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                if (task.date != tomorrowDate) {
+                    Button(
+                        onClick = { onMoveTo(tomorrowDate) },
+                        colors = ButtonDefaults.buttonColors(containerColor = PeachWarm, contentColor = NavyDarkest),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Move to Tomorrow", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                OutlinedButton(
+                    onClick = { onMoveTo(dayAfterDate) },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    Text("Move to Day After Tomorrow", color = TextSilver)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Cancel", color = TextMuted)
                 }
             }
         }
@@ -1130,25 +1601,26 @@ fun MaxTaskLimitGentleDialog(onDismiss: () -> Unit) {
             colors = CardDefaults.cardColors(containerColor = NavySurface),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.5.dp, GoldPrimary, RoundedCornerShape(24.dp))
+                .border(1.dp, PeachWarm, RoundedCornerShape(24.dp))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(22.dp),
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("🛡️", fontSize = 40.sp)
-                Spacer(modifier = Modifier.height(10.dp))
+                Text("🌿", fontSize = 40.sp)
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Your Day is Full!",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = GoldPrimary
+                    text = "Keep Your Day Winnable",
+                    fontFamily = SerifHeadingFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    color = GoldBright
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Rise caps each day at 5 tasks (plus your daily routine) so your list is always winnable! Please move this task to tomorrow or complete an active task first.",
+                    text = "Each day holds up to 5 personal tasks (not counting your routine or weekly tasks) so you never feel overwhelmed. Move this one to tomorrow instead!",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSilver,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1157,10 +1629,10 @@ fun MaxTaskLimitGentleDialog(onDismiss: () -> Unit) {
                 Button(
                     onClick = onDismiss,
                     colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
-                    Text("Got It, Keep It Winnable! ⚡", fontWeight = FontWeight.Bold)
+                    Text("Got It", fontWeight = FontWeight.Bold)
                 }
             }
         }

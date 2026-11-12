@@ -36,9 +36,11 @@ class RiseRepository(private val db: RiseDatabase) {
     fun getTodayString(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
-    fun getTomorrowString(): String {
+    fun getTomorrowString(): String = getOffsetDateString(1)
+
+    fun getOffsetDateString(daysOffset: Int): String {
         val cal = Calendar.getInstance()
-        cal.add(Calendar.DAY_OF_YEAR, 1)
+        cal.add(Calendar.DAY_OF_YEAR, daysOffset)
         return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
     }
 
@@ -51,9 +53,35 @@ class RiseRepository(private val db: RiseDatabase) {
         return db.userProfileDao().getUserProfile() ?: ensureDefaultDataInitialized()
     }
 
+    /**
+     * Delete duplicate tasks (same title, same date), keeping a completed one if there is one.
+     */
+    suspend fun deduplicateTasks() {
+        val allTasks = db.taskDao().getAllTasksSync()
+        if (allTasks.size <= 1) return
+        val grouped = allTasks.groupBy { it.date to it.title.trim().lowercase() }
+        val toDelete = mutableListOf<DailyTask>()
+        for ((_, group) in grouped) {
+            if (group.size > 1) {
+                val sorted = group.sortedWith(
+                    compareByDescending<DailyTask> { it.isCompleted }
+                        .thenByDescending { it.completedAt ?: 0L }
+                        .thenBy { it.id }
+                )
+                toDelete.addAll(sorted.drop(1))
+            }
+        }
+        if (toDelete.isNotEmpty()) {
+            db.taskDao().deleteTasks(toDelete)
+        }
+    }
+
     suspend fun ensureDefaultDataInitialized(): UserProfile {
         val today = getTodayString()
         val currentWeek = getCurrentWeekId()
+
+        // 4. On every app start, delete duplicate tasks (same title, same date), keeping a completed one if there is one
+        deduplicateTasks()
 
         // 1. Profile check: if no UserProfile row, insert default profile (id 1, Emmanuel, alarm 7:00 enabled, evening 20:30, Sunday 21:00, all reminders enabled)
         var profile = db.userProfileDao().getUserProfile()
@@ -132,8 +160,47 @@ class RiseRepository(private val db: RiseDatabase) {
             db.quoteDao().insertAll(com.example.data.quotes.QuoteBank.quotes)
         }
 
-        // 5. Daily routine & weekly tasks check: recreate without duplicates
-        val todayTasks = db.taskDao().getTasksForDateSync(today)
+        // 5. Weekly tasks are NOT pre-seeded across the week here; they are created only on the actual day inside checkAndRefreshStreakAndShield().
+        return checkAndRefreshStreakAndShield()
+    }
+
+    /**
+     * Nightly maintenance:
+     * 1. Deduplicate any existing tasks (same title, same date), keeping completed ones
+     * 2. Rollover unfinished non-routine past tasks to today automatically, skipping any title that already exists today
+     * 3. Ensure daily routine items exist for today without duplicates
+     * 4. Ensure day-specific weekly tasks exist ONLY on the actual day (Tuesday, Friday, Saturday), and only if not already present today
+     * 5. Refresh streak and weekly streak shield
+     */
+    suspend fun checkAndRefreshStreakAndShield(): UserProfile {
+        var profile = db.userProfileDao().getUserProfile() ?: UserProfile(userName = "Emmanuel")
+        val today = getTodayString()
+        val currentWeek = getCurrentWeekId()
+
+        // Ensure duplicates are cleaned first
+        deduplicateTasks()
+
+        // Load existing today tasks to avoid moving/creating duplicates
+        val existingTodayTasks = db.taskDao().getTasksForDateSync(today)
+        val existingTodayTitles = existingTodayTasks.map { it.title.trim().lowercase() }.toMutableSet()
+
+        // 1. Rollover unfinished past non-routine tasks to today with "Moved" tag (Unfinished tasks are NOT failures!)
+        val unfinishedPast = db.taskDao().getUnfinishedTasksBeforeDate(today).filter { !it.isRoutine }
+        if (unfinishedPast.isNotEmpty()) {
+            val tasksToMove = mutableListOf<DailyTask>()
+            for (task in unfinishedPast) {
+                val normalized = task.title.trim().lowercase()
+                if (!existingTodayTitles.contains(normalized)) {
+                    tasksToMove.add(task.copy(date = today, isMovedFromPreviousDay = true))
+                    existingTodayTitles.add(normalized)
+                }
+            }
+            if (tasksToMove.isNotEmpty()) {
+                db.taskDao().updateAllTasks(tasksToMove)
+            }
+        }
+
+        // 2. Ensure daily routine tasks exist for today without duplicates
         val routineTemplates = listOf(
             DailyTask(
                 title = "On waking: Devotion and prayer, write one line of what I learned",
@@ -188,178 +255,24 @@ class RiseRepository(private val db: RiseDatabase) {
                 priority = 3
             )
         )
-
-        for (rt in routineTemplates) {
-            if (todayTasks.none { it.title.equals(rt.title, ignoreCase = true) }) {
-                db.taskDao().insertTask(rt)
-            }
+        val missingRoutines = routineTemplates.filter { rt ->
+            !existingTodayTitles.contains(rt.title.trim().lowercase())
+        }
+        if (missingRoutines.isNotEmpty()) {
+            db.taskDao().insertAllTasks(missingRoutines)
+            missingRoutines.forEach { existingTodayTitles.add(it.title.trim().lowercase()) }
         }
 
-        fun getDateForDayOfWeek(targetDay: Int): String {
-            val c = Calendar.getInstance()
-            c.set(Calendar.DAY_OF_WEEK, targetDay)
-            return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(c.time)
-        }
-
-        val tuesdayDate = getDateForDayOfWeek(Calendar.TUESDAY)
-        val fridayDate = getDateForDayOfWeek(Calendar.FRIDAY)
-        val saturdayDate = getDateForDayOfWeek(Calendar.SATURDAY)
-
-        val tTasks = db.taskDao().getTasksForDateSync(tuesdayDate)
-        if (tTasks.none { it.title.contains("Sermon 1", ignoreCase = true) }) {
-            db.taskDao().insertTask(
-                DailyTask(
-                    title = "Tuesday: Listen to Sermon 1 and write what I learned",
-                    notes = "Spiritual sermon reflection",
-                    date = tuesdayDate,
-                    isCompleted = false,
-                    xpReward = 45,
-                    coinReward = 30,
-                    categoryName = "Spiritual",
-                    categoryColor = "#8B5CF6",
-                    scheduledDayOfWeek = Calendar.TUESDAY,
-                    isRoutine = false,
-                    isEssential = true,
-                    priority = 3
-                )
-            )
-        }
-
-        val fTasks = db.taskDao().getTasksForDateSync(fridayDate)
-        if (fTasks.none { it.title.contains("Sermon 2", ignoreCase = true) }) {
-            db.taskDao().insertTask(
-                DailyTask(
-                    title = "Friday: Listen to Sermon 2 and write what I learned",
-                    notes = "Spiritual sermon reflection",
-                    date = fridayDate,
-                    isCompleted = false,
-                    xpReward = 45,
-                    coinReward = 30,
-                    categoryName = "Spiritual",
-                    categoryColor = "#8B5CF6",
-                    scheduledDayOfWeek = Calendar.FRIDAY,
-                    isRoutine = false,
-                    isEssential = true,
-                    priority = 3
-                )
-            )
-        }
-
-        val sTasks = db.taskDao().getTasksForDateSync(saturdayDate)
-        if (sTasks.none { it.title.contains("voice note", ignoreCase = true) }) {
-            db.taskDao().insertTask(
-                DailyTask(
-                    title = "Saturday: Record my weekly book voice note before 9pm",
-                    notes = "Mentorship weekly audio summary",
-                    date = saturdayDate,
-                    isCompleted = false,
-                    xpReward = 50,
-                    coinReward = 35,
-                    categoryName = "Mentorship",
-                    categoryColor = "#10B981",
-                    scheduledDayOfWeek = Calendar.SATURDAY,
-                    isRoutine = false,
-                    isEssential = true,
-                    priority = 3
-                )
-            )
-        }
-
-        return checkAndRefreshStreakAndShield()
-    }
-
-    /**
-     * Nightly maintenance:
-     * 1. Rollover unfinished past tasks to today automatically with isMovedFromPreviousDay = true (no XP lost, no streak broken!)
-     * 2. Ensure daily routine items exist for today
-     * 3. Ensure day-specific weekly tasks exist for today (Tuesday, Friday, Saturday)
-     * 4. Refresh streak and weekly streak shield
-     */
-    suspend fun checkAndRefreshStreakAndShield(): UserProfile {
-        var profile = db.userProfileDao().getUserProfile() ?: UserProfile(userName = "Emmanuel")
-        val today = getTodayString()
-        val currentWeek = getCurrentWeekId()
-
-        // 1. Rollover unfinished past tasks to today with "Moved" tag (Unfinished tasks are NOT failures!)
-        val unfinishedPast = db.taskDao().getUnfinishedTasksBeforeDate(today)
-        if (unfinishedPast.isNotEmpty()) {
-            val movedTasks = unfinishedPast.map { task ->
-                task.copy(date = today, isMovedFromPreviousDay = true)
-            }
-            db.taskDao().updateAllTasks(movedTasks)
-        }
-
-        // 2. Ensure daily routine tasks exist for today
-        val todayTasks = db.taskDao().getTasksForDateSync(today)
-        val hasDevotion = todayTasks.any { it.title.contains("Devotion", ignoreCase = true) }
-        if (!hasDevotion) {
-            val routineTasks = listOf(
-                DailyTask(
-                    title = "On waking: Devotion and prayer, write one line of what I learned",
-                    notes = "Spiritual foundation for the day",
-                    date = today,
-                    isCompleted = false,
-                    xpReward = 35,
-                    coinReward = 20,
-                    categoryName = "Spiritual",
-                    categoryColor = "#8B5CF6",
-                    isRoutine = true,
-                    isEssential = true,
-                    priority = 3
-                ),
-                DailyTask(
-                    title = "After lectures: Read the two write-ups and note what I learned",
-                    notes = "Mentorship growth write-ups",
-                    date = today,
-                    isCompleted = false,
-                    xpReward = 30,
-                    coinReward = 20,
-                    categoryName = "Mentorship",
-                    categoryColor = "#10B981",
-                    isRoutine = true,
-                    isEssential = true,
-                    priority = 2
-                ),
-                DailyTask(
-                    title = "Evening: Read 10 pages of my assigned book",
-                    notes = "Consistent daily reading habit",
-                    date = today,
-                    isCompleted = false,
-                    xpReward = 30,
-                    coinReward = 20,
-                    categoryName = "Mentorship",
-                    categoryColor = "#10B981",
-                    isRoutine = true,
-                    isEssential = false,
-                    priority = 2
-                ),
-                DailyTask(
-                    title = "Night: Submit my daily report before 11:30pm (reminder at 10:30pm)",
-                    notes = "Daily accountability submission",
-                    date = today,
-                    isCompleted = false,
-                    xpReward = 40,
-                    coinReward = 25,
-                    categoryName = "Mentorship",
-                    categoryColor = "#10B981",
-                    isRoutine = true,
-                    isEssential = true,
-                    priority = 3
-                )
-            )
-            db.taskDao().insertAllTasks(routineTasks)
-        }
-
-        // 3. Weekly tasks for specific days
+        // 3. Weekly tasks for specific days (created ONLY on the actual day, and ONLY if title doesn't already exist today)
         val cal = Calendar.getInstance()
         val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
         when (dayOfWeek) {
             Calendar.TUESDAY -> {
-                val hasSermon1 = todayTasks.any { it.title.contains("Sermon 1", ignoreCase = true) }
-                if (!hasSermon1) {
+                val title = "Tuesday: Listen to Sermon 1 and write what I learned"
+                if (!existingTodayTitles.contains(title.trim().lowercase())) {
                     db.taskDao().insertTask(
                         DailyTask(
-                            title = "Tuesday: Listen to Sermon 1 and write what I learned",
+                            title = title,
                             notes = "Spiritual sermon reflection",
                             date = today,
                             isCompleted = false,
@@ -376,11 +289,11 @@ class RiseRepository(private val db: RiseDatabase) {
                 }
             }
             Calendar.FRIDAY -> {
-                val hasSermon2 = todayTasks.any { it.title.contains("Sermon 2", ignoreCase = true) }
-                if (!hasSermon2) {
+                val title = "Friday: Listen to Sermon 2 and write what I learned"
+                if (!existingTodayTitles.contains(title.trim().lowercase())) {
                     db.taskDao().insertTask(
                         DailyTask(
-                            title = "Friday: Listen to Sermon 2 and write what I learned",
+                            title = title,
                             notes = "Spiritual sermon reflection",
                             date = today,
                             isCompleted = false,
@@ -397,11 +310,11 @@ class RiseRepository(private val db: RiseDatabase) {
                 }
             }
             Calendar.SATURDAY -> {
-                val hasVoiceNote = todayTasks.any { it.title.contains("voice note", ignoreCase = true) }
-                if (!hasVoiceNote) {
+                val title = "Saturday: Record my weekly book voice note before 9pm"
+                if (!existingTodayTitles.contains(title.trim().lowercase())) {
                     db.taskDao().insertTask(
                         DailyTask(
-                            title = "Saturday: Record my weekly book voice note before 9pm",
+                            title = title,
                             notes = "Mentorship weekly audio summary",
                             date = today,
                             isCompleted = false,

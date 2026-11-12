@@ -1,7 +1,17 @@
 package com.example.ui.screens
 
 import android.app.TimePickerDialog
-import android.speech.tts.Voice
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -23,37 +34,33 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.RecordVoiceOver
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import android.os.Build
-import android.provider.Settings
-import android.content.Intent
-import android.net.Uri
-import android.widget.Toast
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -61,16 +68,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -80,14 +84,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -95,11 +103,13 @@ import com.example.audio.GeminiTtsService
 import com.example.data.model.BadgeItem
 import com.example.data.model.CategoryItem
 import com.example.ui.RiseViewModel
+import com.example.ui.theme.CalmCardBorder
+import com.example.ui.theme.CalmCardSurface
+import com.example.ui.theme.CalmCardSurfaceWarm
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.FlameOrange
 import com.example.ui.theme.FlameYellow
 import com.example.ui.theme.GoldBright
-import com.example.ui.theme.GoldMuted
 import com.example.ui.theme.GoldPrimary
 import com.example.ui.theme.GoldSecondary
 import com.example.ui.theme.NavyBackground
@@ -108,21 +118,24 @@ import com.example.ui.theme.NavySurface
 import com.example.ui.theme.NavySurfaceBorder
 import com.example.ui.theme.NavySurfaceElevated
 import com.example.ui.theme.NavySurfaceHighlight
+import com.example.ui.theme.PeachSoft
+import com.example.ui.theme.PeachWarm
+import com.example.ui.theme.SerifHeadingFontFamily
+import com.example.ui.theme.SunriseTwilight
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextSilver
 import com.example.ui.theme.TextWhite
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     viewModel: RiseViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val userProfile by viewModel.userProfile.collectAsState()
+    val rewards by viewModel.rewards.collectAsState()
     val badges by viewModel.badges.collectAsState()
     val categories by viewModel.categories.collectAsState()
-    val availableVoices by viewModel.ttsManager.availableVoices.collectAsState()
     val friendlyVoices by viewModel.friendlyVoices.collectAsState()
     val geminiAudioStatus by viewModel.geminiAudioStatus.collectAsState()
     val isGeneratingGeminiAudio by viewModel.isGeneratingGeminiAudio.collectAsState()
@@ -133,9 +146,16 @@ fun ProfileScreen(
     val alarmStatus by viewModel.alarmStatus.collectAsState()
 
     var showEditNameDialog by remember { mutableStateOf(false) }
+    var showCreateRewardDialog by remember { mutableStateOf(false) }
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<CategoryItem?>(null) }
     var showExactAlarmPermissionDialog by remember { mutableStateOf(false) }
+
+    // Collapsible Settings sections — ALL collapsed by default
+    var isAlarmExpanded by remember { mutableStateOf(false) }
+    var isVoiceExpanded by remember { mutableStateOf(false) }
+    var isCategoriesExpanded by remember { mutableStateOf(false) }
+    var isAdvancedExpanded by remember { mutableStateOf(false) }
 
     // Gemini Realistic Voice State
     var useRealisticVoice by remember(userProfile?.useRealisticVoice) {
@@ -153,9 +173,13 @@ fun ProfileScreen(
 
     // Phone TTS State
     var showAllLanguages by remember { mutableStateOf(false) }
+    var speedSlider by remember(userProfile?.speechSpeed) { mutableFloatStateOf(userProfile?.speechSpeed ?: 0.95f) }
+    var pitchSlider by remember(userProfile?.speechPitch) { mutableFloatStateOf(userProfile?.speechPitch ?: 0.85f) }
+    var selectedVoiceName by remember(userProfile?.speechVoiceName) { mutableStateOf(userProfile?.speechVoiceName ?: "") }
 
     val level = userProfile?.level ?: 1
     val currentXp = userProfile?.xp ?: 0
+    val userCoins = userProfile?.coins ?: 0
     val (minXp, maxXp) = when (level) {
         1 -> Pair(0, 150)
         2 -> Pair(150, 350)
@@ -168,73 +192,104 @@ fun ProfileScreen(
     }
     val levelProgress = ((currentXp - minXp).toFloat() / (maxXp - minXp).coerceAtLeast(1)).coerceIn(0f, 1f)
 
-    var speedSlider by remember(userProfile?.speechSpeed) { mutableFloatStateOf(userProfile?.speechSpeed ?: 0.95f) }
-    var pitchSlider by remember(userProfile?.speechPitch) { mutableFloatStateOf(userProfile?.speechPitch ?: 0.85f) }
-    var selectedVoiceName by remember(userProfile?.speechVoiceName) { mutableStateOf(userProfile?.speechVoiceName ?: "") }
+    val alarmHour = userProfile?.alarmHour ?: 7
+    val alarmMin = userProfile?.alarmMinute ?: 0
+    val alarmEnabled = userProfile?.alarmEnabled ?: true
+    val eveningHour = userProfile?.eveningHour ?: 20
+    val eveningMin = userProfile?.eveningMinute ?: 30
+    val eveningEnabled = userProfile?.eveningReminderEnabled ?: true
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Profile & Settings",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextWhite
-                    )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testTag("profile_back_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = GoldPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NavyDarkest)
-            )
-        },
-        containerColor = NavyBackground
-    ) { padding ->
+    val alarmTimeFormatted = String.format(
+        "%d:%02d %s",
+        if (alarmHour % 12 == 0) 12 else alarmHour % 12,
+        alarmMin,
+        if (alarmHour >= 12) "PM" else "AM"
+    )
+    val eveningTimeFormatted = String.format(
+        "%d:%02d %s",
+        if (eveningHour % 12 == 0) 12 else eveningHour % 12,
+        eveningMin,
+        if (eveningHour >= 12) "PM" else "AM"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NavyBackground)
+            .testTag("me_screen")
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 36.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // 1. HERO USER LEVEL CARD
+            // 0. CALM SERIF HEADER
             item {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.5.dp, GoldPrimary, RoundedCornerShape(22.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(SunriseTwilight.copy(alpha = 0.85f), NavyBackground)
+                            )
+                        )
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column {
+                        Text(
+                            text = "Me",
+                            fontFamily = SerifHeadingFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 34.sp,
+                            color = TextWhite
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Your sanctuary, earned rewards & gentle preferences",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = PeachSoft.copy(alpha = 0.88f)
+                        )
+                    }
+                }
+            }
+
+            // 1. PROFILE CARD (Avatar, Name, Level & XP, Streak/Shield, Badges)
+            item {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = CalmCardSurfaceWarm),
+                    border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.38f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(22.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
-                                        .size(60.dp)
+                                        .size(62.dp)
                                         .clip(CircleShape)
-                                        .background(GoldPrimary)
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(GoldPrimary, PeachWarm)
+                                            )
+                                        )
                                 ) {
                                     Text(
-                                        text = "${userProfile?.userName?.firstOrNull() ?: 'E'}",
+                                        text = "${userProfile?.userName?.firstOrNull()?.uppercaseChar() ?: 'E'}",
+                                        fontFamily = SerifHeadingFontFamily,
                                         fontSize = 28.sp,
-                                        fontWeight = FontWeight.Black,
+                                        fontWeight = FontWeight.Bold,
                                         color = NavyDarkest
                                     )
                                 }
@@ -245,34 +300,36 @@ fun ProfileScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = userProfile?.userName ?: "Emmanuel",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            fontWeight = FontWeight.Black,
-                                            color = TextWhite
+                                            fontFamily = SerifHeadingFontFamily,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 22.sp,
+                                            color = TextWhite,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
                                         IconButton(
                                             onClick = { showEditNameDialog = true },
-                                            modifier = Modifier.size(24.dp)
+                                            modifier = Modifier.size(36.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Edit,
                                                 contentDescription = "Edit Name",
-                                                tint = GoldPrimary,
+                                                tint = PeachSoft,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
 
                                     Surface(
-                                        color = GoldPrimary.copy(alpha = 0.2f),
-                                        shape = RoundedCornerShape(8.dp)
+                                        color = GoldPrimary.copy(alpha = 0.16f),
+                                        shape = RoundedCornerShape(50)
                                     ) {
                                         Text(
                                             text = "Level $level • ${userProfile?.levelTitle ?: "Starter"}",
                                             color = GoldBright,
                                             style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                         )
                                     }
                                 }
@@ -281,13 +338,13 @@ fun ProfileScreen(
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = "$currentXp XP",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Black,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = GoldBright
                                 )
                                 Text(
-                                    text = "${maxXp - currentXp} XP to next rank",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = "${(maxXp - currentXp).coerceAtLeast(0)} to next",
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = TextMuted
                                 )
                             }
@@ -300,882 +357,314 @@ fun ProfileScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
+                                .clip(RoundedCornerShape(50)),
                             color = GoldPrimary,
                             trackColor = NavySurfaceElevated,
                             strokeCap = StrokeCap.Round
                         )
-                    }
-                }
-            }
 
-            // 2. STREAKS & HABIT FORMATION
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🔥", fontSize = 20.sp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "${userProfile?.currentStreak ?: 1} Day Streak",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = FlameYellow
-                                )
-                            }
-                            Text(
-                                text = "To-Do List Streak: ${userProfile?.listCompletionStreak ?: 0} days",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSilver
-                            )
-                        }
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = NavySurfaceElevated,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (userProfile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted
-                            )
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Shield,
-                                    contentDescription = null,
-                                    tint = if (userProfile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (userProfile?.streakShieldAvailable == true) "Shield Ready 🛡️" else "Used (Recharges Mon)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (userProfile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 3A. REALISTIC VOICE (GEMINI TTS) SECTION
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Realistic Voice (Gemini) 🤖✨",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-                        Text(
-                            text = "Hyper-realistic neural voice for morning & evening",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = GoldMuted
-                        )
-                    }
-
-                    Switch(
-                        checked = useRealisticVoice,
-                        onCheckedChange = { checked ->
-                            useRealisticVoice = checked
-                            viewModel.updateRealisticVoiceSettings(checked, selectedGeminiVoice, geminiVoiceStyle)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = NavyDarkest,
-                            checkedTrackColor = GoldPrimary,
-                            uncheckedThumbColor = TextMuted,
-                            uncheckedTrackColor = NavySurfaceElevated
-                        ),
-                        modifier = Modifier.testTag("realistic_voice_switch")
-                    )
-                }
-            }
-
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.5.dp,
-                        if (useRealisticVoice) GoldPrimary.copy(alpha = 0.6f) else NavySurfaceBorder
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        // Gemini API Key Input
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Key,
-                                    contentDescription = null,
-                                    tint = GoldPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Your Gemini API Key",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextWhite
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (viewModel.hasGeminiApiKey()) EmeraldSuccess.copy(alpha = 0.15f) else FlameOrange.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    text = if (viewModel.hasGeminiApiKey()) "Encrypted 🔒" else "Required ⚠️",
-                                    color = if (viewModel.hasGeminiApiKey()) EmeraldSuccess else FlameYellow,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Stored ONLY on this phone (AES-GCM encrypted in hardware Android KeyStore). Never hard-coded into public repo.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted,
-                            fontSize = 11.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = geminiApiKeyInput,
-                            onValueChange = { geminiApiKeyInput = it },
-                            placeholder = { Text("Paste your Gemini API key (AIza...)", color = TextMuted, fontSize = 12.sp) },
-                            singleLine = true,
-                            visualTransformation = if (isApiKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
-                            trailingIcon = {
-                                IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }) {
-                                    Icon(
-                                        imageVector = if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                        contentDescription = "Toggle visibility",
-                                        tint = TextSilver,
-                                        modifier = Modifier.size(18.dp)
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🔥", fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${userProfile?.currentStreak ?: 1} Day Streak",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FlameYellow
                                     )
                                 }
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldPrimary,
-                                unfocusedBorderColor = NavySurfaceBorder,
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedContainerColor = NavySurfaceElevated,
-                                unfocusedContainerColor = NavySurfaceElevated
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("gemini_api_key_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Button(
-                                onClick = {
-                                    viewModel.saveGeminiApiKey(geminiApiKeyInput)
-                                },
-                                enabled = geminiApiKeyInput.isNotBlank(),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = GoldPrimary,
-                                    contentColor = NavyDarkest
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp)
-                                    .testTag("save_gemini_key_button")
-                            ) {
-                                Text("Save Key Securely", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            }
-
-                            if (viewModel.hasGeminiApiKey()) {
-                                OutlinedButton(
-                                    onClick = {
-                                        geminiApiKeyInput = ""
-                                        viewModel.clearGeminiApiKey()
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameOrange),
-                                    modifier = Modifier.height(42.dp)
-                                ) {
-                                    Text("Clear", fontSize = 12.sp)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Daily Usage Quota Counter
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = NavySurfaceElevated,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.25f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("gemini_usage_counter_card")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
                                 Text(
-                                    text = "Realistic voice uses today: $geminiDailyUsesCount of 10",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (geminiDailyUsesCount >= 10) FlameOrange else GoldBright,
-                                    modifier = Modifier.testTag("gemini_usage_counter")
-                                )
-                                Text(
-                                    text = "Free Tier",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSilver,
-                                    fontSize = 11.sp
+                                    text = "Clean sweeps: ${userProfile?.listCompletionStreak ?: 0} days",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSilver
                                 )
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Error Banner for Preview / Generation Failures & 429 Quota Exceeded
-                        if (geminiAudioStatus.contains("failed", ignoreCase = true) ||
-                            geminiAudioStatus.contains("error", ignoreCase = true) ||
-                            geminiAudioStatus.contains("limit reached", ignoreCase = true)
-                        ) {
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = FlameOrange.copy(alpha = 0.2f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, FlameOrange),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("gemini_error_banner")
+                                shape = RoundedCornerShape(50),
+                                color = NavySurfaceElevated.copy(alpha = 0.8f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (userProfile?.streakShieldAvailable == true) EmeraldSuccess.copy(alpha = 0.6f)
+                                    else CalmCardBorder
+                                )
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                                 ) {
-                                    Text("⚠️", fontSize = 18.sp)
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = "Streak Shield",
+                                        tint = if (userProfile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = geminiAudioStatus,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = FlameYellow,
+                                        text = if (userProfile?.streakShieldAvailable == true) "Shield Ready" else "Shield Used",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (userProfile?.streakShieldAvailable == true) EmeraldSuccess else TextMuted,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        // Gemini Voices Picker
-                        Text(
-                            text = "Choose Gemini Voice (${GeminiTtsService.PREBUILT_VOICES.size}):",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Selected: $selectedGeminiVoice",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = GoldBright,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.testTag("selected_voice_label")
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        if (badges.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            HorizontalDivider(color = CalmCardBorder)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            val unlockedCount = badges.count { it.isUnlocked }
+                            Text(
+                                text = "Milestones Earned ($unlockedCount/${badges.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = PeachSoft,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(badges, key = { it.id }) { badge ->
+                                    CompactBadgeChip(badge = badge)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            GeminiTtsService.PREBUILT_VOICES.forEach { voice ->
-                                val isSelected = selectedGeminiVoice == voice.name
-                                val isThisVoiceActive = activePreviewVoice == voice.name
-                                val isThisVoiceGenerating = isThisVoiceActive && isPreviewGenerating
-                                val isThisVoicePlaying = isThisVoiceActive && isPreviewPlaying
-                                val isOtherVoiceGenerating = isPreviewGenerating && !isThisVoiceActive
+            // 2. REWARDS SHOP CARD
+            item {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = CalmCardSurface),
+                    border = BorderStroke(1.dp, CalmCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .testTag("rewards_shop_card")
+                ) {
+                    Column(modifier = Modifier.padding(22.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Rewards Shop",
+                                    fontFamily = SerifHeadingFontFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 23.sp,
+                                    color = TextWhite
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🪙", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "$userCoins coins available",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GoldBright
+                                    )
+                                }
+                            }
 
+                            Button(
+                                onClick = { showCreateRewardDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GoldPrimary.copy(alpha = 0.16f),
+                                    contentColor = GoldBright
+                                ),
+                                shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .height(40.dp)
+                                    .testTag("create_custom_reward_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Add Custom Reward",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Custom", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            rewards.forEach { reward ->
+                                val canAfford = userCoins >= reward.coinPrice
                                 Surface(
-                                    onClick = {
-                                        viewModel.updateRealisticVoiceSettings(useRealisticVoice, voice.name, geminiVoiceStyle)
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (isSelected) GoldPrimary.copy(alpha = 0.15f) else NavySurfaceElevated,
-                                    border = androidx.compose.foundation.BorderStroke(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = NavySurfaceElevated.copy(alpha = 0.65f),
+                                    border = BorderStroke(
                                         1.dp,
-                                        if (isSelected) GoldPrimary else NavySurfaceBorder
+                                        if (canAfford) GoldPrimary.copy(alpha = 0.35f) else NavySurfaceBorder
                                     ),
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .testTag("voice_card_${voice.name}")
+                                        .testTag("reward_item_${reward.id}")
                                 ) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .padding(14.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.weight(1f)
                                         ) {
-                                            Icon(
-                                                imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RecordVoiceOver,
-                                                contentDescription = null,
-                                                tint = if (isSelected) GoldPrimary else TextMuted,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(CircleShape)
+                                                    .background(NavySurface)
+                                                    .border(1.dp, GoldSecondary.copy(alpha = 0.3f), CircleShape)
+                                            ) {
+                                                Text(text = reward.iconEmoji, fontSize = 20.sp)
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
                                             Column {
                                                 Text(
-                                                    text = voice.label,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                    color = if (isSelected) GoldBright else TextWhite
+                                                    text = reward.title,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = TextWhite
                                                 )
-                                                Text(
-                                                    text = voice.description,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = TextSilver,
-                                                    fontSize = 11.sp
-                                                )
-                                            }
-                                        }
-
-                                        Button(
-                                            onClick = {
-                                                if (isThisVoicePlaying) {
-                                                    viewModel.stopPreview()
-                                                } else {
-                                                    viewModel.previewGeminiVoice(voice.name, geminiVoiceStyle)
+                                                if (reward.description.isNotBlank()) {
+                                                    Text(
+                                                        text = reward.description,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = TextSilver
+                                                    )
                                                 }
-                                            },
-                                            enabled = !isOtherVoiceGenerating,
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isThisVoicePlaying) FlameOrange else if (isSelected) GoldPrimary else NavySurfaceHighlight,
-                                                contentColor = if (isThisVoicePlaying) TextWhite else if (isSelected) NavyDarkest else TextWhite,
-                                                disabledContainerColor = NavySurfaceHighlight.copy(alpha = 0.5f),
-                                                disabledContentColor = TextMuted
-                                            ),
-                                            shape = RoundedCornerShape(10.dp),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                            modifier = Modifier
-                                                .height(34.dp)
-                                                .testTag("preview_gemini_${voice.name}")
-                                        ) {
-                                            if (isThisVoiceGenerating) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(12.dp),
-                                                    color = if (isSelected) NavyDarkest else GoldPrimary,
-                                                    strokeWidth = 2.dp
+                                                if (reward.timesClaimed > 0) {
+                                                    Text(
+                                                        text = "Enjoyed ${reward.timesClaimed} ${if (reward.timesClaimed == 1) "time" else "times"}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = EmeraldSuccess
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Button(
+                                                onClick = { viewModel.redeemReward(reward) },
+                                                enabled = canAfford,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = GoldPrimary,
+                                                    contentColor = NavyDarkest,
+                                                    disabledContainerColor = NavySurface,
+                                                    disabledContentColor = TextMuted
+                                                ),
+                                                shape = RoundedCornerShape(50),
+                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                                modifier = Modifier
+                                                    .height(38.dp)
+                                                    .testTag("redeem_button_${reward.id}")
+                                            ) {
+                                                Text(
+                                                    text = "${reward.coinPrice} 🪙",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp
                                                 )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Loading...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                            } else if (isThisVoicePlaying) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Stop,
-                                                    contentDescription = "Stop",
-                                                    modifier = Modifier.size(14.dp)
+                                            }
+                                            if (!canAfford) {
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = "Need ${reward.coinPrice - userCoins} more",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextMuted,
+                                                    fontSize = 10.sp
                                                 )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                            } else {
-                                                Icon(
-                                                    imageVector = Icons.Default.VolumeUp,
-                                                    contentDescription = "Preview",
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            } else if (!reward.isPreset) {
+                                                IconButton(
+                                                    onClick = { viewModel.deleteReward(reward) },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete reward",
+                                                        tint = TextMuted,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Voice Style Text Box
-                        Text(
-                            text = "Voice Style Prompt:",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Directs Gemini's tone, pacing, emotion and inflection.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted,
-                            fontSize = 11.sp
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        OutlinedTextField(
-                            value = geminiVoiceStyle,
-                            onValueChange = {
-                                geminiVoiceStyle = it
-                                viewModel.updateRealisticVoiceSettings(useRealisticVoice, selectedGeminiVoice, it)
-                            },
-                            maxLines = 4,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldPrimary,
-                                unfocusedBorderColor = NavySurfaceBorder,
-                                focusedTextColor = TextWhite,
-                                unfocusedTextColor = TextWhite,
-                                focusedContainerColor = NavySurfaceElevated,
-                                unfocusedContainerColor = NavySurfaceElevated
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("gemini_voice_style_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Generate Night-Before Status & Manual Trigger
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = NavySurfaceElevated,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Night-Before Audio Status:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = FlameYellow
-                                    )
-
-                                    if (isGeneratingGeminiAudio) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            color = GoldPrimary,
-                                            strokeWidth = 2.dp
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                Text(
-                                    text = if (geminiAudioStatus.isNotBlank()) {
-                                        geminiAudioStatus
-                                    } else if (userProfile?.lastMorningAudioGeneratedForDate?.isNotEmpty() == true) {
-                                        "Audio ready for date: ${userProfile?.lastMorningAudioGeneratedForDate} ✅"
-                                    } else {
-                                        "Will generate once tonight during evening check-in (or automatically at 11:00 PM)."
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSilver,
-                                    fontSize = 12.sp
-                                )
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                Button(
-                                    onClick = { viewModel.generateTomorrowMorningAudio(force = true) },
-                                    enabled = useRealisticVoice && viewModel.hasGeminiApiKey() && !isGeneratingGeminiAudio,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = GoldPrimary,
-                                        contentColor = NavyDarkest
-                                    ),
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(40.dp)
-                                        .testTag("regenerate_morning_audio_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AutoAwesome,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isGeneratingGeminiAudio) "Regenerating Audio..." else "Regenerate morning audio",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }
 
-            // 3B. PHONE TEXT-TO-SPEECH STUDIO (REQUIREMENT 5)
+            // 3. SETTINGS SECTION HEADER
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Phone Voice Studio 📱🎙️",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-                        Text(
-                            text = "Built-in fallback voice and pitch engine",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.resetPhoneVoiceToDefault()
-                            speedSlider = com.example.audio.TtsManager.DEFAULT_SPEED
-                            pitchSlider = com.example.audio.TtsManager.DEFAULT_PITCH
-                            selectedVoiceName = ""
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldPrimary),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier
-                            .height(32.dp)
-                            .testTag("reset_default_voice_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.RestartAlt,
-                            contentDescription = "Reset",
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Reset Default", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
+                Column(modifier = Modifier.padding(horizontal = 24.dp)) {
+                    Text(
+                        text = "Settings",
+                        fontFamily = SerifHeadingFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 24.sp,
+                        color = TextWhite
+                    )
+                    Text(
+                        text = "Tap any section below to customize",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted
+                    )
                 }
             }
 
+            // 3A. ALARM (Collapsed by default)
             item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    modifier = Modifier.fillMaxWidth()
+                CollapsibleSettingsCard(
+                    title = "Alarm",
+                    summary = if (alarmEnabled) "$alarmTimeFormatted • Evening $eveningTimeFormatted" else "Morning alarm off • Evening $eveningTimeFormatted",
+                    icon = Icons.Rounded.Alarm,
+                    accentColor = PeachWarm,
+                    expanded = isAlarmExpanded,
+                    onToggleExpand = { isAlarmExpanded = !isAlarmExpanded },
+                    testTag = "settings_alarm_card"
                 ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "Speech Speed: ${String.format("%.2f", speedSlider)}x (Default: 0.95x)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSilver
-                        )
-                        Slider(
-                            value = speedSlider,
-                            onValueChange = {
-                                speedSlider = it
-                                viewModel.updateSpeechSettings(speedSlider, pitchSlider, selectedVoiceName)
-                            },
-                            valueRange = 0.5f..1.5f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = GoldPrimary,
-                                activeTrackColor = GoldPrimary,
-                                inactiveTrackColor = NavySurfaceElevated
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = "Voice Pitch (Default: Deep adult voice 0.85): ${String.format("%.2f", pitchSlider)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSilver
-                        )
-                        Slider(
-                            value = pitchSlider,
-                            onValueChange = {
-                                pitchSlider = it
-                                viewModel.updateSpeechSettings(speedSlider, pitchSlider, selectedVoiceName)
-                            },
-                            valueRange = 0.5f..1.5f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = FlameOrange,
-                                activeTrackColor = FlameOrange,
-                                inactiveTrackColor = NavySurfaceElevated
-                            )
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Friendly Voice Picker & Language Toggle
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        // Morning Wake-Up Alarm
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Device Voices (${if (showAllLanguages) friendlyVoices.size else friendlyVoices.count { it.isEnglish }}):",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TextWhite
-                            )
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (showAllLanguages) "All languages" else "English only",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextSilver
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Switch(
-                                    checked = showAllLanguages,
-                                    onCheckedChange = { showAllLanguages = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = NavyDarkest,
-                                        checkedTrackColor = GoldPrimary
-                                    ),
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val displayedFriendlyVoices = if (showAllLanguages) {
-                            friendlyVoices
-                        } else {
-                            friendlyVoices.filter { it.isEnglish }
-                        }
-
-                        if (displayedFriendlyVoices.isEmpty()) {
-                            Text(
-                                text = "Using system default English voice (deep adult configuration).",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextMuted
-                            )
-                        } else {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(displayedFriendlyVoices) { friendlyVoice ->
-                                    val isSelected = selectedVoiceName == friendlyVoice.voiceName
-                                    Surface(
-                                        onClick = {
-                                            selectedVoiceName = friendlyVoice.voiceName
-                                            viewModel.updateSpeechSettings(speedSlider, pitchSlider, friendlyVoice.voiceName)
-                                        },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = if (isSelected) GoldPrimary else NavySurfaceElevated,
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            1.dp,
-                                            if (isSelected) GoldPrimary else NavySurfaceBorder
-                                        ),
-                                        modifier = Modifier.testTag("voice_${friendlyVoice.displayName.replace(" ", "_")}")
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp)) {
-                                            Text(
-                                                text = friendlyVoice.displayName,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isSelected) NavyDarkest else TextWhite
-                                            )
-                                            Text(
-                                                text = friendlyVoice.locale.displayCountry.ifBlank { friendlyVoice.locale.language.uppercase() },
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 10.sp,
-                                                color = if (isSelected) NavyDarkest.copy(alpha = 0.7f) else TextMuted
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = { viewModel.previewVoice(selectedVoiceName, speedSlider, pitchSlider) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = NavySurfaceHighlight,
-                                contentColor = TextWhite
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp)
-                                .testTag("preview_phone_voice_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VolumeUp,
-                                contentDescription = null,
-                                tint = GoldPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Preview Phone Voice", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // 4. TASK CATEGORIES MANAGER (REQUIREMENT 4)
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Task Categories (${categories.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextWhite
-                    )
-
-                    Surface(
-                        onClick = { showAddCategoryDialog = true },
-                        shape = RoundedCornerShape(10.dp),
-                        color = NavySurfaceElevated
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add Category", style = MaterialTheme.typography.labelSmall, color = GoldPrimary, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            items(categories, key = { it.id }) { cat ->
-                val catColor = try {
-                    Color(android.graphics.Color.parseColor(cat.colorHex))
-                } catch (e: Exception) {
-                    GoldPrimary
-                }
-
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(catColor.copy(alpha = 0.2f))
-                            ) {
-                                Text(cat.iconEmoji, fontSize = 16.sp)
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = cat.name,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    "Morning Wake-Up Alarm",
+                                    style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = TextWhite
                                 )
-                                if (cat.description.isNotBlank()) {
-                                    Text(
-                                        text = cat.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSilver,
-                                        fontSize = 11.sp
-                                    )
-                                }
+                                Text(
+                                    "Loud ALARM stream until you tap 'I'm up'",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSilver
+                                )
                             }
-                        }
-
-                        Row {
-                            IconButton(
-                                onClick = { editingCategory = cat },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = TextMuted, modifier = Modifier.size(16.dp))
-                            }
-                            if (!cat.isDefault) {
-                                IconButton(
-                                    onClick = { viewModel.deleteCategory(cat) },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = TextMuted, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 5. ALARM & SUNDAY SETTINGS
-            item {
-                Text(
-                    text = "Alarm & Schedule",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextWhite
-                )
-            }
-
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        val alarmHour = userProfile?.alarmHour ?: 7
-                        val alarmMin = userProfile?.alarmMinute ?: 0
-                        val alarmEnabled = userProfile?.alarmEnabled ?: true
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text("Morning Wake-Up Alarm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextWhite)
-                                Text("Loud ALARM stream, rings until 'I'm up'", style = MaterialTheme.typography.bodySmall, color = TextSilver)
-                            }
-
                             Switch(
                                 checked = alarmEnabled,
                                 onCheckedChange = { isEnabled ->
@@ -1191,16 +680,20 @@ fun ProfileScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Surface(
                                 onClick = {
                                     TimePickerDialog(context, { _, h, m ->
-                                        val timeStr = String.format("%02d:%02d %s", if (h % 12 == 0) 12 else h % 12, m, if (h >= 12) "PM" else "AM")
+                                        val timeStr = String.format(
+                                            "%02d:%02d %s",
+                                            if (h % 12 == 0) 12 else h % 12,
+                                            m,
+                                            if (h >= 12) "PM" else "AM"
+                                        )
                                         Toast.makeText(context, "Alarm set for $timeStr", Toast.LENGTH_SHORT).show()
                                         if (!viewModel.alarmScheduler.canScheduleExactAlarms()) {
                                             showExactAlarmPermissionDialog = true
@@ -1208,33 +701,41 @@ fun ProfileScreen(
                                         viewModel.updateAlarmTime(h, m, true)
                                     }, alarmHour, alarmMin, false).show()
                                 },
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 color = NavySurfaceElevated,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.4f))
+                                border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.45f))
                             ) {
-                                val timeStr = String.format("%02d:%02d %s", if (alarmHour % 12 == 0) 12 else alarmHour % 12, alarmMin, if (alarmHour >= 12) "PM" else "AM")
-                                Text(text = timeStr, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TextWhite, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                                Text(
+                                    text = alarmTimeFormatted,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextWhite,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                                )
                             }
 
                             Button(
                                 onClick = { viewModel.testAlarmNow() },
-                                colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
-                                shape = RoundedCornerShape(10.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GoldPrimary,
+                                    contentColor = NavyDarkest
+                                ),
+                                shape = RoundedCornerShape(50),
+                                modifier = Modifier.height(44.dp)
                             ) {
                                 Text("Test Loud Alarm", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
 
-                        // 4. CLEAR ALARM STATUS
-                        Spacer(modifier = Modifier.height(10.dp))
+                        // Clear green/red Alarm Status line
                         if (alarmStatus.isScheduled) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(EmeraldSuccess.copy(alpha = 0.12f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -1256,9 +757,9 @@ fun ProfileScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .background(Color(0xFFFF5252).copy(alpha = 0.12f))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1296,16 +797,856 @@ fun ProfileScreen(
                                             }
                                             context.startActivity(intent)
                                         }
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    }
                                 ) {
                                     Text("Fix", color = GoldPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = CalmCardBorder)
+
+                        // Evening Check-In Time Setting
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Evening Check-In Reminder",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextWhite
+                                )
+                                Text(
+                                    "Daily reflection & tomorrow's plan at $eveningTimeFormatted",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSilver
+                                )
+                            }
+                            Switch(
+                                checked = eveningEnabled,
+                                onCheckedChange = { enabled ->
+                                    viewModel.updateEveningTime(eveningHour, eveningMin, enabled)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = NavyDarkest,
+                                    checkedTrackColor = GoldPrimary
+                                )
+                            )
+                        }
+
+                        Surface(
+                            onClick = {
+                                TimePickerDialog(context, { _, h, m ->
+                                    viewModel.updateEveningTime(h, m, true)
+                                }, eveningHour, eveningMin, false).show()
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            color = NavySurfaceElevated,
+                            border = BorderStroke(1.dp, CalmCardBorder)
+                        ) {
+                            Text(
+                                text = "Evening reminder: $eveningTimeFormatted",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PeachSoft,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3B. VOICE (Phone Voice Studio — Collapsed by default)
+            item {
+                CollapsibleSettingsCard(
+                    title = "Voice",
+                    summary = "Speed ${String.format("%.2fx", speedSlider)} • Pitch ${String.format("%.2f", pitchSlider)}",
+                    icon = Icons.Rounded.GraphicEq,
+                    accentColor = GoldPrimary,
+                    expanded = isVoiceExpanded,
+                    onToggleExpand = { isVoiceExpanded = !isVoiceExpanded },
+                    testTag = "settings_voice_card"
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Phone Voice Studio",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite
+                            )
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.resetPhoneVoiceToDefault()
+                                    speedSlider = com.example.audio.TtsManager.DEFAULT_SPEED
+                                    pitchSlider = com.example.audio.TtsManager.DEFAULT_PITCH
+                                    selectedVoiceName = ""
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldPrimary),
+                                shape = RoundedCornerShape(50),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .height(34.dp)
+                                    .testTag("reset_default_voice_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.RestartAlt,
+                                    contentDescription = "Reset",
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Reset Default", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Column {
+                            Text(
+                                text = "Speech Speed: ${String.format("%.2f", speedSlider)}x (Default: 0.95x)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSilver
+                            )
+                            Slider(
+                                value = speedSlider,
+                                onValueChange = {
+                                    speedSlider = it
+                                    viewModel.updateSpeechSettings(speedSlider, pitchSlider, selectedVoiceName)
+                                },
+                                valueRange = 0.5f..1.5f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = GoldPrimary,
+                                    activeTrackColor = GoldPrimary,
+                                    inactiveTrackColor = NavySurfaceElevated
+                                )
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Voice Pitch: ${String.format("%.2f", pitchSlider)} (Default: 0.85)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSilver
+                            )
+                            Slider(
+                                value = pitchSlider,
+                                onValueChange = {
+                                    pitchSlider = it
+                                    viewModel.updateSpeechSettings(speedSlider, pitchSlider, selectedVoiceName)
+                                },
+                                valueRange = 0.5f..1.5f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = PeachWarm,
+                                    activeTrackColor = PeachWarm,
+                                    inactiveTrackColor = NavySurfaceElevated
+                                )
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Device Voices (${if (showAllLanguages) friendlyVoices.size else friendlyVoices.count { it.isEnglish }})",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (showAllLanguages) "All languages" else "English only",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSilver
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Switch(
+                                    checked = showAllLanguages,
+                                    onCheckedChange = { showAllLanguages = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = NavyDarkest,
+                                        checkedTrackColor = GoldPrimary
+                                    )
+                                )
+                            }
+                        }
+
+                        val displayedFriendlyVoices = if (showAllLanguages) {
+                            friendlyVoices
+                        } else {
+                            friendlyVoices.filter { it.isEnglish }
+                        }
+
+                        if (displayedFriendlyVoices.isEmpty()) {
+                            Text(
+                                text = "Using system default English voice (deep adult configuration).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted
+                            )
+                        } else {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(displayedFriendlyVoices) { friendlyVoice ->
+                                    val isSelected = selectedVoiceName == friendlyVoice.voiceName
+                                    Surface(
+                                        onClick = {
+                                            selectedVoiceName = friendlyVoice.voiceName
+                                            viewModel.updateSpeechSettings(speedSlider, pitchSlider, friendlyVoice.voiceName)
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isSelected) GoldPrimary else NavySurfaceElevated,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) GoldPrimary else NavySurfaceBorder
+                                        ),
+                                        modifier = Modifier.testTag("voice_${friendlyVoice.displayName.replace(" ", "_")}")
+                                    ) {
+                                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                            Text(
+                                                text = friendlyVoice.displayName,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) NavyDarkest else TextWhite
+                                            )
+                                            Text(
+                                                text = friendlyVoice.locale.displayCountry.ifBlank { friendlyVoice.locale.language.uppercase() },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 10.sp,
+                                                color = if (isSelected) NavyDarkest.copy(alpha = 0.7f) else TextMuted
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.previewVoice(selectedVoiceName, speedSlider, pitchSlider) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = NavySurfaceHighlight,
+                                contentColor = TextWhite
+                            ),
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("preview_phone_voice_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                tint = GoldPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Preview Phone Voice", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // 3C. CATEGORIES (Collapsed by default)
+            item {
+                CollapsibleSettingsCard(
+                    title = "Categories",
+                    summary = "${categories.size} life areas",
+                    icon = Icons.Rounded.Category,
+                    accentColor = Color(0xFF7FD1B9),
+                    expanded = isCategoriesExpanded,
+                    onToggleExpand = { isCategoriesExpanded = !isCategoriesExpanded },
+                    testTag = "settings_categories_card"
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Task Categories (${categories.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite
+                            )
+                            Surface(
+                                onClick = { showAddCategoryDialog = true },
+                                shape = RoundedCornerShape(50),
+                                color = GoldPrimary.copy(alpha = 0.16f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add Category",
+                                        tint = GoldBright,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Add Category",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = GoldBright,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        categories.forEach { cat ->
+                            val catColor = try {
+                                Color(android.graphics.Color.parseColor(cat.colorHex))
+                            } catch (_: Exception) {
+                                GoldPrimary
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = NavySurfaceElevated.copy(alpha = 0.6f),
+                                border = BorderStroke(1.dp, CalmCardBorder),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .background(catColor.copy(alpha = 0.2f))
+                                        ) {
+                                            Text(cat.iconEmoji, fontSize = 16.sp)
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = cat.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = TextWhite
+                                            )
+                                            if (cat.description.isNotBlank()) {
+                                                Text(
+                                                    text = cat.description,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = TextSilver,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Row {
+                                        IconButton(
+                                            onClick = { editingCategory = cat },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Edit category",
+                                                tint = TextSilver,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        if (!cat.isDefault) {
+                                            IconButton(
+                                                onClick = { viewModel.deleteCategory(cat) },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete category",
+                                                    tint = TextMuted,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            // 3D. ADVANCED (Gemini API key & realistic AI voice options — Collapsed by default)
+            item {
+                CollapsibleSettingsCard(
+                    title = "Advanced",
+                    summary = if (useRealisticVoice) "Gemini Voice: $selectedGeminiVoice • $geminiDailyUsesCount/10" else "Gemini realistic voice options",
+                    icon = Icons.Rounded.Tune,
+                    accentColor = Color(0xFF9F8FEF),
+                    expanded = isAdvancedExpanded,
+                    onToggleExpand = { isAdvancedExpanded = !isAdvancedExpanded },
+                    testTag = "settings_advanced_card"
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        // Use Realistic Voice Switch
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Use realistic voice",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextWhite
+                                )
+                                Text(
+                                    text = "Gemini neural voice for morning briefing",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSilver
+                                )
+                            }
+                            Switch(
+                                checked = useRealisticVoice,
+                                onCheckedChange = { checked ->
+                                    useRealisticVoice = checked
+                                    viewModel.updateRealisticVoiceSettings(checked, selectedGeminiVoice, geminiVoiceStyle)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = NavyDarkest,
+                                    checkedTrackColor = GoldPrimary,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = NavySurfaceElevated
+                                ),
+                                modifier = Modifier.testTag("realistic_voice_switch")
+                            )
+                        }
+
+                        HorizontalDivider(color = CalmCardBorder)
+
+                        // Encrypted Gemini API Key Input
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Key,
+                                        contentDescription = null,
+                                        tint = GoldPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Your Gemini API Key",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextWhite
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = if (viewModel.hasGeminiApiKey()) EmeraldSuccess.copy(alpha = 0.15f) else FlameOrange.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = if (viewModel.hasGeminiApiKey()) "Encrypted 🔒" else "Required ⚠️",
+                                        color = if (viewModel.hasGeminiApiKey()) EmeraldSuccess else FlameYellow,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Stored ONLY on this phone (AES-GCM encrypted in Android KeyStore). Never hard-coded into repo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            OutlinedTextField(
+                                value = geminiApiKeyInput,
+                                onValueChange = { geminiApiKeyInput = it },
+                                placeholder = { Text("Paste your Gemini API key (AIza...)", color = TextMuted, fontSize = 12.sp) },
+                                singleLine = true,
+                                visualTransformation = if (isApiKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
+                                trailingIcon = {
+                                    IconButton(onClick = { isApiKeyMasked = !isApiKeyMasked }) {
+                                        Icon(
+                                            imageVector = if (isApiKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                            contentDescription = "Toggle key visibility",
+                                            tint = TextSilver,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldPrimary,
+                                    unfocusedBorderColor = NavySurfaceBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedContainerColor = NavySurfaceElevated,
+                                    unfocusedContainerColor = NavySurfaceElevated
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("gemini_api_key_input")
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Button(
+                                    onClick = { viewModel.saveGeminiApiKey(geminiApiKeyInput) },
+                                    enabled = geminiApiKeyInput.isNotBlank(),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = GoldPrimary,
+                                        contentColor = NavyDarkest
+                                    ),
+                                    shape = RoundedCornerShape(50),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .testTag("save_gemini_key_button")
+                                ) {
+                                    Text("Save Key Securely", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+
+                                if (viewModel.hasGeminiApiKey()) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            geminiApiKeyInput = ""
+                                            viewModel.clearGeminiApiKey()
+                                        },
+                                        shape = RoundedCornerShape(50),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = FlameOrange),
+                                        modifier = Modifier.height(42.dp)
+                                    ) {
+                                        Text("Clear", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Daily Usage Quota Counter
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = NavySurfaceElevated,
+                            border = BorderStroke(1.dp, GoldPrimary.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("gemini_usage_counter_card")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Realistic voice uses today: $geminiDailyUsesCount of 10",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (geminiDailyUsesCount >= 10) FlameOrange else GoldBright,
+                                    modifier = Modifier.testTag("gemini_usage_counter")
+                                )
+                                Text(
+                                    text = "Free Tier",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSilver,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        // Error Banner for Preview / Generation Failures & 429 Quota Exceeded
+                        if (geminiAudioStatus.contains("failed", ignoreCase = true) ||
+                            geminiAudioStatus.contains("error", ignoreCase = true) ||
+                            geminiAudioStatus.contains("limit reached", ignoreCase = true)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = FlameOrange.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, FlameOrange),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("gemini_error_banner")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("⚠️", fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = geminiAudioStatus,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = FlameYellow,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+
+                        // Gemini Voice Picker
+                        Column {
+                            Text(
+                                text = "Choose Gemini Voice (${GeminiTtsService.PREBUILT_VOICES.size})",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Selected: $selectedGeminiVoice",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = GoldBright,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.testTag("selected_voice_label")
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                GeminiTtsService.PREBUILT_VOICES.forEach { voice ->
+                                    val isSelected = selectedGeminiVoice == voice.name
+                                    val isThisVoiceActive = activePreviewVoice == voice.name
+                                    val isThisVoiceGenerating = isThisVoiceActive && isPreviewGenerating
+                                    val isThisVoicePlaying = isThisVoiceActive && isPreviewPlaying
+                                    val isOtherVoiceGenerating = isPreviewGenerating && !isThisVoiceActive
+
+                                    Surface(
+                                        onClick = {
+                                            viewModel.updateRealisticVoiceSettings(useRealisticVoice, voice.name, geminiVoiceStyle)
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = if (isSelected) GoldPrimary.copy(alpha = 0.15f) else NavySurfaceElevated,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) GoldPrimary else NavySurfaceBorder
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("voice_card_${voice.name}")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RecordVoiceOver,
+                                                    contentDescription = null,
+                                                    tint = if (isSelected) GoldPrimary else TextMuted,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column {
+                                                    Text(
+                                                        text = voice.label,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                        color = if (isSelected) GoldBright else TextWhite
+                                                    )
+                                                    Text(
+                                                        text = voice.description,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = TextSilver,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    if (isThisVoicePlaying) {
+                                                        viewModel.stopPreview()
+                                                    } else {
+                                                        viewModel.previewGeminiVoice(voice.name, geminiVoiceStyle)
+                                                    }
+                                                },
+                                                enabled = !isOtherVoiceGenerating,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = if (isThisVoicePlaying) FlameOrange else if (isSelected) GoldPrimary else NavySurfaceHighlight,
+                                                    contentColor = if (isThisVoicePlaying) TextWhite else if (isSelected) NavyDarkest else TextWhite,
+                                                    disabledContainerColor = NavySurfaceHighlight.copy(alpha = 0.5f),
+                                                    disabledContentColor = TextMuted
+                                                ),
+                                                shape = RoundedCornerShape(50),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                                modifier = Modifier
+                                                    .height(36.dp)
+                                                    .testTag("preview_gemini_${voice.name}")
+                                            ) {
+                                                if (isThisVoiceGenerating) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(12.dp),
+                                                        color = if (isSelected) NavyDarkest else GoldPrimary,
+                                                        strokeWidth = 2.dp
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Loading...", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                } else if (isThisVoicePlaying) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Stop,
+                                                        contentDescription = "Stop",
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                } else {
+                                                    Icon(
+                                                        imageVector = Icons.Default.VolumeUp,
+                                                        contentDescription = "Preview",
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Preview", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Voice Style Text Box
+                        Column {
+                            Text(
+                                text = "Voice Style Prompt",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhite
+                            )
+                            Text(
+                                text = "Directs Gemini's tone, pacing, emotion and inflection.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = geminiVoiceStyle,
+                                onValueChange = {
+                                    geminiVoiceStyle = it
+                                    viewModel.updateRealisticVoiceSettings(useRealisticVoice, selectedGeminiVoice, it)
+                                },
+                                maxLines = 4,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GoldPrimary,
+                                    unfocusedBorderColor = NavySurfaceBorder,
+                                    focusedTextColor = TextWhite,
+                                    unfocusedTextColor = TextWhite,
+                                    focusedContainerColor = NavySurfaceElevated,
+                                    unfocusedContainerColor = NavySurfaceElevated
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("gemini_voice_style_input")
+                            )
+                        }
+
+                        // Night-Before Morning Audio Status & Regenerate Button
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = NavySurfaceElevated,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "Night-Before Audio Status",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = FlameYellow
+                                    )
+                                    if (isGeneratingGeminiAudio) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            color = GoldPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (geminiAudioStatus.isNotBlank()) {
+                                        geminiAudioStatus
+                                    } else if (userProfile?.lastMorningAudioGeneratedForDate?.isNotEmpty() == true) {
+                                        "Audio ready for ${userProfile?.lastMorningAudioGeneratedForDate} ✅"
+                                    } else {
+                                        "Will generate once tonight during evening check-in (or automatically at 11:00 PM)."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSilver,
+                                    fontSize = 12.sp
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = { viewModel.generateTomorrowMorningAudio(force = true) },
+                                    enabled = useRealisticVoice && viewModel.hasGeminiApiKey() && !isGeneratingGeminiAudio,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = GoldPrimary,
+                                        contentColor = NavyDarkest
+                                    ),
+                                    shape = RoundedCornerShape(50),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(42.dp)
+                                        .testTag("regenerate_morning_audio_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Regenerate morning audio", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create Custom Reward Dialog (reused cleanly from RewardsShopScreen.kt)
+        if (showCreateRewardDialog) {
+            CreateRewardDialog(
+                onDismiss = { showCreateRewardDialog = false },
+                onConfirm = { title, description, price, emoji ->
+                    viewModel.addCustomReward(title, description, price, emoji)
+                    showCreateRewardDialog = false
+                }
+            )
         }
 
         // Add Category Dialog
@@ -1337,12 +1678,24 @@ fun ProfileScreen(
             var tempName by remember { mutableStateOf(userProfile?.userName ?: "Emmanuel") }
             Dialog(onDismissRequest = { showEditNameDialog = false }) {
                 Card(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = NavySurface),
-                    modifier = Modifier.fillMaxWidth().border(1.5.dp, GoldPrimary, RoundedCornerShape(20.dp))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, GoldPrimary.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-                        Text("Edit Name", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = GoldPrimary)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(22.dp)
+                    ) {
+                        Text(
+                            "Edit Name",
+                            fontFamily = SerifHeadingFontFamily,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldBright
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedTextField(
                             value = tempName,
@@ -1356,15 +1709,33 @@ fun ProfileScreen(
                                 focusedContainerColor = NavySurfaceElevated,
                                 unfocusedContainerColor = NavySurfaceElevated
                             ),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(modifier = Modifier.height(18.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(onClick = { showEditNameDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = NavySurfaceElevated), modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showEditNameDialog = false },
+                                shape = RoundedCornerShape(50),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Text("Cancel", color = TextSilver)
                             }
-                            Button(onClick = { viewModel.updateUserName(tempName); showEditNameDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest), modifier = Modifier.weight(1f)) {
+                            Button(
+                                onClick = {
+                                    viewModel.updateUserName(tempName)
+                                    showEditNameDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = GoldPrimary,
+                                    contentColor = NavyDarkest
+                                ),
+                                shape = RoundedCornerShape(50),
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Text("Save", fontWeight = FontWeight.Bold)
                             }
                         }
@@ -1373,7 +1744,7 @@ fun ProfileScreen(
             }
         }
 
-        // Exact Alarm Permission Dialog (Requirement 3)
+        // Exact Alarm Permission Dialog
         if (showExactAlarmPermissionDialog) {
             AlertDialog(
                 onDismissRequest = { showExactAlarmPermissionDialog = false },
@@ -1413,8 +1784,139 @@ fun ProfileScreen(
                     }
                 },
                 containerColor = NavySurface,
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(20.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleSettingsCard(
+    title: String,
+    summary: String,
+    icon: ImageVector,
+    accentColor: Color,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    testTag: String,
+    content: @Composable () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = CalmCardSurface),
+        border = BorderStroke(
+            1.dp,
+            if (expanded) accentColor.copy(alpha = 0.45f) else CalmCardBorder
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .testTag(testTag)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggleExpand)
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(accentColor.copy(alpha = 0.16f))
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextWhite
+                        )
+                        Text(
+                            text = summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSilver,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                    contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                    tint = TextSilver
+                )
+            }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, bottom = 20.dp)
+                ) {
+                    HorizontalDivider(color = CalmCardBorder)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    content()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactBadgeChip(badge: BadgeItem) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (badge.isUnlocked) GoldPrimary.copy(alpha = 0.14f) else NavySurfaceElevated.copy(alpha = 0.55f),
+        border = BorderStroke(
+            1.dp,
+            if (badge.isUnlocked) GoldPrimary.copy(alpha = 0.5f) else CalmCardBorder
+        ),
+        modifier = Modifier
+            .alpha(if (badge.isUnlocked) 1f else 0.55f)
+            .testTag("badge_chip_${badge.code}")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(text = badge.iconEmoji, fontSize = 18.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = badge.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (badge.isUnlocked) GoldBright else TextSilver
+                )
+                Text(
+                    text = if (badge.isUnlocked) "Unlocked" else "Locked",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = if (badge.isUnlocked) EmeraldSuccess else TextMuted
+                )
+            }
         }
     }
 }
@@ -1434,16 +1936,23 @@ fun AddOrEditCategoryDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = NavySurface),
-            modifier = Modifier.fillMaxWidth().border(1.5.dp, GoldPrimary, RoundedCornerShape(22.dp))
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, GoldPrimary.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(22.dp)
+            ) {
                 Text(
                     text = if (initialCategory == null) "New Category" else "Edit Category",
-                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = SerifHeadingFontFamily,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = GoldPrimary
+                    color = GoldBright
                 )
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -1460,7 +1969,7 @@ fun AddOrEditCategoryDialog(
                         focusedContainerColor = NavySurfaceElevated,
                         unfocusedContainerColor = NavySurfaceElevated
                     ),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1472,7 +1981,7 @@ fun AddOrEditCategoryDialog(
                     items(emojis) { em ->
                         Surface(
                             onClick = { emoji = em },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = if (emoji == em) GoldPrimary.copy(alpha = 0.3f) else NavySurfaceElevated
                         ) {
                             Text(text = em, fontSize = 20.sp, modifier = Modifier.padding(8.dp))
@@ -1500,13 +2009,24 @@ fun AddOrEditCategoryDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = NavySurfaceElevated), modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text("Cancel", color = TextSilver)
                     }
                     Button(
                         onClick = { if (name.isNotBlank()) onSave(name, colorHex, emoji) },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GoldPrimary,
+                            contentColor = NavyDarkest
+                        ),
+                        shape = RoundedCornerShape(50),
                         modifier = Modifier.weight(1f)
                     ) {
                         Text("Save", fontWeight = FontWeight.Bold)

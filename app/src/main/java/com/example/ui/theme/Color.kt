@@ -37,3 +37,23 @@ val TextDarkGold = Color(0xFF5A4108)
 // Semantic Palette
 val LevelBadgeBg = Color(0xFF1D2845)
 val CardGlow = Color(0x1A60A5FA)
+
+// Calm Warmed-Up Peach, Sky & Sanctuary Tones
+val PeachWarm = Color(0xFFFFB085)
+val PeachSoft = Color(0xFFFFD5B8)
+val PeachRose = Color(0xFFE98A77)
+val SunriseCoral = Color(0xFFD97262)
+val SunriseTwilight = Color(0xFF433056)
+
+val AfternoonSkyTop = Color(0xFF1F4068)
+val AfternoonSkyMid = Color(0xFF477998)
+val AfternoonWarmGlow = Color(0xFFF3CFA2)
+
+val NightSkyTop = Color(0xFF060A18)
+val NightSkyMid = Color(0xFF0F1938)
+val NightStarlight = Color(0xFFFFF5DF)
+
+val CalmCardBorder = Color(0x2EFFE0C2)
+val CalmCardSurface = Color(0xFF121C36)
+val CalmCardSurfaceWarm = Color(0xFF1A2546)
+

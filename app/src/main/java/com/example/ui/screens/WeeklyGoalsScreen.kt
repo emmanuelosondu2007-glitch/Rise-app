@@ -2,7 +2,6 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,27 +21,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,17 +46,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.CategoryItem
-import com.example.data.model.WeeklyGoal
 import com.example.ui.RiseViewModel
 import com.example.ui.components.WeeklyProgressChartSection
+import com.example.ui.theme.CalmCardBorder
+import com.example.ui.theme.CalmCardSurface
+import com.example.ui.theme.CalmCardSurfaceWarm
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.GoldBright
 import com.example.ui.theme.GoldPrimary
@@ -71,15 +69,18 @@ import com.example.ui.theme.NavyDarkest
 import com.example.ui.theme.NavySurface
 import com.example.ui.theme.NavySurfaceBorder
 import com.example.ui.theme.NavySurfaceElevated
+import com.example.ui.theme.PeachSoft
+import com.example.ui.theme.PeachWarm
+import com.example.ui.theme.SerifHeadingFontFamily
+import com.example.ui.theme.SunriseTwilight
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextSilver
 import com.example.ui.theme.TextWhite
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeeklyGoalsScreen(
     viewModel: RiseViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit = {}
 ) {
     val weeklyGoals by viewModel.weeklyGoals.collectAsState()
     val todayTasks by viewModel.todayTasks.collectAsState()
@@ -88,127 +89,143 @@ fun WeeklyGoalsScreen(
 
     var showAddGoalDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Weekly Focus & Analytics",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextWhite
-                    )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier.testTag("weekly_back_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = GoldPrimary
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NavyDarkest)
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddGoalDialog = true },
-                containerColor = GoldPrimary,
-                contentColor = NavyDarkest,
-                shape = RoundedCornerShape(18.dp),
-                modifier = Modifier.testTag("add_weekly_goal_fab")
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Weekly Goal")
-            }
-        },
-        containerColor = NavyBackground
-    ) { padding ->
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NavyBackground)
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 90.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // 1. EMBEDDED WEEKLY PROGRESS CHART (BAR CHART + RING CHART + LAST WEEK COMPARISON)
+            // Soft warm serif header
             item {
-                WeeklyProgressChartSection(report = weeklyReport)
-            }
-
-            // 2. PERFECT WEEK BOUNTY BANNER
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = NavySurface),
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, GoldPrimary.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(SunriseTwilight.copy(alpha = 0.7f), NavyBackground)
+                            )
+                        )
+                        .statusBarsPadding()
+                        .padding(horizontal = 22.dp, vertical = 20.dp)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🏆", fontSize = 26.sp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "PERFECT WEEK BOUNTY",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = GoldPrimary,
-                                    letterSpacing = 1.sp
-                                )
-                                Text(
-                                    text = "+250 🪙 Coins & +500 XP",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = GoldBright
-                                )
-                            }
+                    Column {
+                        Text(
+                            text = "WEEKLY REFLECTION",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PeachSoft,
+                            letterSpacing = 1.4.sp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Your Journey",
+                            fontFamily = SerifHeadingFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 34.sp,
+                            color = TextWhite
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Steady small steps shape your week.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSilver
+                        )
+                    }
+                }
+            }
+
+            // 1. EMBEDDED WEEKLY PROGRESS CHART
+            item {
+                WeeklyProgressChartSection(
+                    report = weeklyReport,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+            }
+
+            // 2. PERFECT WEEK BOUNTY CARD
+            item {
+                Card(
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Brush.linearGradient(listOf(CalmCardSurfaceWarm, CalmCardSurface)))
+                        .border(1.dp, GoldPrimary.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🏆", fontSize = 28.sp)
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "PERFECT WEEK BOUNTY",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PeachSoft,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "+250 🪙 Coins & +500 XP",
+                                fontFamily = SerifHeadingFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = GoldBright
+                            )
                         }
                     }
                 }
             }
 
+            // 3. WEEKLY FOCUS GOALS HEADER
             item {
                 Text(
                     text = "Weekly Focus Goals (${weeklyGoals.size}/5)",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontFamily = SerifHeadingFontFamily,
                     fontWeight = FontWeight.Bold,
-                    color = TextWhite
+                    fontSize = 22.sp,
+                    color = TextWhite,
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
             }
 
             if (weeklyGoals.isEmpty()) {
                 item {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = NavySurfaceElevated),
-                        shape = RoundedCornerShape(18.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        colors = CardDefaults.cardColors(containerColor = CalmCardSurface),
+                        shape = RoundedCornerShape(24.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, CalmCardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(24.dp),
+                                .padding(26.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("⚡", fontSize = 36.sp)
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("🌱", fontSize = 36.sp)
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = "No weekly goals set yet",
-                                style = MaterialTheme.typography.titleMedium,
+                                fontFamily = SerifHeadingFontFamily,
                                 fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
                                 color = TextWhite
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Tap the '+' button below to create your 3 to 5 big goals for the week.",
+                                text = "Create 3 to 5 gentle weekly intentions to link your daily steps.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -218,20 +235,23 @@ fun WeeklyGoalsScreen(
                     val linkedTasks = todayTasks.filter { it.weeklyGoalId == goal.id }
                     val completedCount = linkedTasks.count { it.isCompleted }
                     val progress = if (goal.targetCount > 0) (completedCount.toFloat() / goal.targetCount).coerceIn(0f, 1f) else 0f
-                    val goalColor = try {
-                        Color(android.graphics.Color.parseColor(goal.colorHex))
-                    } catch (e: Exception) {
-                        GoldPrimary
+                    val goalColor = remember(goal.colorHex) {
+                        try {
+                            Color(android.graphics.Color.parseColor(goal.colorHex))
+                        } catch (e: Exception) {
+                            GoldPrimary
+                        }
                     }
 
                     Card(
-                        shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = NavySurface),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = CalmCardSurface),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, goalColor.copy(alpha = 0.4f), RoundedCornerShape(18.dp))
+                            .padding(horizontal = 20.dp)
+                            .border(1.dp, goalColor.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(20.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -244,13 +264,13 @@ fun WeeklyGoalsScreen(
                                     Box(
                                         contentAlignment = Alignment.Center,
                                         modifier = Modifier
-                                            .size(36.dp)
+                                            .size(40.dp)
                                             .clip(CircleShape)
-                                            .background(goalColor.copy(alpha = 0.2f))
+                                            .background(goalColor.copy(alpha = 0.18f))
                                     ) {
                                         Text(goal.iconName, fontSize = 18.sp)
                                     }
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
                                             text = goal.title,
@@ -259,7 +279,7 @@ fun WeeklyGoalsScreen(
                                             color = TextWhite
                                         )
                                         Text(
-                                            text = "${goal.categoryName} • $completedCount of ${goal.targetCount} linked tasks",
+                                            text = "${goal.categoryName} • $completedCount of ${goal.targetCount} linked",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = TextSilver
                                         )
@@ -268,10 +288,10 @@ fun WeeklyGoalsScreen(
 
                                 IconButton(
                                     onClick = { viewModel.deleteWeeklyGoal(goal) },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(36.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Delete,
+                                        imageVector = Icons.Rounded.DeleteOutline,
                                         contentDescription = "Delete Goal",
                                         tint = TextMuted,
                                         modifier = Modifier.size(18.dp)
@@ -285,8 +305,8 @@ fun WeeklyGoalsScreen(
                                 progress = { progress },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(10.dp)
-                                    .clip(RoundedCornerShape(5.dp)),
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(50)),
                                 color = goalColor,
                                 trackColor = NavySurfaceElevated,
                                 strokeCap = StrokeCap.Round
@@ -299,16 +319,15 @@ fun WeeklyGoalsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = if (completedCount >= goal.targetCount) "✨ Weekly Goal Achieved!" else "${goal.targetCount - completedCount} more tasks needed",
+                                    text = if (completedCount >= goal.targetCount) "Goal Achieved" else "${goal.targetCount - completedCount} more steps",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = if (completedCount >= goal.targetCount) EmeraldSuccess else TextMuted
                                 )
-
                                 Text(
                                     text = "${(progress * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Black,
+                                    fontWeight = FontWeight.Bold,
                                     color = goalColor
                                 )
                             }
@@ -316,18 +335,39 @@ fun WeeklyGoalsScreen(
                     }
                 }
             }
-        }
 
-        if (showAddGoalDialog) {
-            AddWeeklyGoalWithCategoryDialog(
-                categories = categories,
-                onDismiss = { showAddGoalDialog = false },
-                onConfirm = { title, targetCount, category ->
-                    viewModel.addWeeklyGoal(title, targetCount, category)
-                    showAddGoalDialog = false
+            // One clear primary button at the bottom of Journey screen
+            item {
+                Button(
+                    onClick = { showAddGoalDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = GoldPrimary,
+                        contentColor = NavyDarkest
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .height(54.dp)
+                        .testTag("add_weekly_goal_fab")
+                ) {
+                    Icon(imageVector = Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Set a New Weekly Goal", fontWeight = FontWeight.Bold)
                 }
-            )
+            }
         }
+    }
+
+    if (showAddGoalDialog) {
+        AddWeeklyGoalWithCategoryDialog(
+            categories = categories,
+            onDismiss = { showAddGoalDialog = false },
+            onConfirm = { title, targetCount, category ->
+                viewModel.addWeeklyGoal(title, targetCount, category)
+                showAddGoalDialog = false
+            }
+        )
     }
 }
 
@@ -347,7 +387,7 @@ fun AddWeeklyGoalWithCategoryDialog(
             colors = CardDefaults.cardColors(containerColor = NavySurface),
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.5.dp, GoldPrimary, RoundedCornerShape(24.dp))
+                .border(1.dp, PeachSoft.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -355,13 +395,14 @@ fun AddWeeklyGoalWithCategoryDialog(
                     .padding(22.dp)
             ) {
                 Text(
-                    text = "New Weekly Goal 🚩",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = GoldPrimary
+                    text = "New Weekly Goal",
+                    fontFamily = SerifHeadingFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 22.sp,
+                    color = GoldBright
                 )
                 Text(
-                    text = "Set a big weekly priority (aim for 3-5 big goals).",
+                    text = "Set a gentle weekly intention (aim for 3–5 big priorities).",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSilver
                 )
@@ -387,19 +428,19 @@ fun AddWeeklyGoalWithCategoryDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("Select Category:", style = MaterialTheme.typography.labelSmall, color = TextSilver)
+                Text("Category:", style = MaterialTheme.typography.labelSmall, color = TextSilver)
                 Spacer(modifier = Modifier.height(6.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(categories) { cat ->
                         val isSel = selectedCategory.id == cat.id || selectedCategory.name == cat.name
                         Surface(
                             onClick = { selectedCategory = cat },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(50),
                             color = if (isSel) GoldPrimary else NavySurfaceElevated
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(cat.iconEmoji, fontSize = 12.sp)
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -425,7 +466,7 @@ fun AddWeeklyGoalWithCategoryDialog(
                     listOf(3, 4, 5, 7).forEach { num ->
                         Surface(
                             onClick = { targetCount = num },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(14.dp),
                             color = if (targetCount == num) GoldPrimary else NavySurfaceElevated,
                             modifier = Modifier.weight(1f)
                         ) {
@@ -433,10 +474,8 @@ fun AddWeeklyGoalWithCategoryDialog(
                                 text = "$num",
                                 color = if (targetCount == num) NavyDarkest else TextWhite,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .padding(vertical = 10.dp)
-                                    .align(Alignment.CenterVertically),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                modifier = Modifier.padding(vertical = 10.dp),
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -448,13 +487,12 @@ fun AddWeeklyGoalWithCategoryDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Button(
+                    OutlinedButton(
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = NavySurfaceElevated, contentColor = TextSilver),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", color = TextSilver)
                     }
 
                     Button(
@@ -464,10 +502,10 @@ fun AddWeeklyGoalWithCategoryDialog(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = GoldPrimary, contentColor = NavyDarkest),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.weight(1f).height(48.dp)
                     ) {
-                        Text("Save Goal ⚡", fontWeight = FontWeight.Black)
+                        Text("Save Goal", fontWeight = FontWeight.Bold)
                     }
                 }
             }

@@ -42,12 +42,17 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     fun canScheduleExactAlarms(): Boolean = alarmScheduler.canScheduleExactAlarms()
 
     val todayDateString = repository.getTodayString()
+    val tomorrowDateString = repository.getTomorrowString()
+    val dayAfterTomorrowDateString = repository.getOffsetDateString(2)
     val currentWeekId = repository.getCurrentWeekId()
 
     val userProfile: StateFlow<UserProfile?> = repository.userProfile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val todayTasks: StateFlow<List<DailyTask>> = repository.getTasksForDate(todayDateString)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val tomorrowTasks: StateFlow<List<DailyTask>> = repository.getTasksForDate(tomorrowDateString)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val weeklyGoals: StateFlow<List<WeeklyGoal>> = repository.getGoalsForWeek(currentWeekId)
@@ -160,6 +165,10 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         _showMaxTaskLimitDialog.value = false
     }
 
+    fun triggerMaxTaskLimitDialog() {
+        _showMaxTaskLimitDialog.value = true
+    }
+
     fun toggleBusyDayMode() {
         viewModelScope.launch {
             val current = userProfile.value ?: repository.getProfileSync()
@@ -208,7 +217,7 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Adds task with 5-task limit per day (excluding routine items)
+     * Adds task for Today with 5-task limit (counting ONLY user's own added tasks, not routine or weekly ones)
      */
     fun addTask(
         title: String,
@@ -218,19 +227,47 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         priority: Int,
         isEssential: Boolean = false
     ) {
-        if (title.isBlank()) return
-        val currentCustomCount = todayTasks.value.count { !it.isRoutine }
-        if (currentCustomCount >= 5) {
-            _showMaxTaskLimitDialog.value = true
-            return
-        }
+        addTaskForDate(
+            date = todayDateString,
+            title = title,
+            notes = notes,
+            weeklyGoalId = weeklyGoalId,
+            category = category,
+            priority = priority,
+            isEssential = isEssential
+        )
+    }
+
+    fun addTaskForDate(
+        date: String,
+        title: String,
+        notes: String,
+        weeklyGoalId: Long?,
+        category: CategoryItem,
+        priority: Int,
+        isEssential: Boolean = false
+    ) {
+        val trimmedTitle = title.trim()
+        if (trimmedTitle.isBlank()) return
 
         viewModelScope.launch {
+            val tasksOnDate = repository.getTasksForDateSync(date)
+            // 5. The "x/5" limit counts only my own added tasks, not routine or weekly ones.
+            val personalCount = tasksOnDate.count { !it.isRoutine && it.scheduledDayOfWeek == null }
+            if (personalCount >= 5) {
+                _showMaxTaskLimitDialog.value = true
+                return@launch
+            }
+            // Avoid inserting duplicate title on same date
+            if (tasksOnDate.any { it.title.trim().equals(trimmedTitle, ignoreCase = true) }) {
+                return@launch
+            }
+
             repository.insertTask(
                 DailyTask(
-                    title = title.trim(),
+                    title = trimmedTitle,
                     notes = notes.trim(),
-                    date = todayDateString,
+                    date = date,
                     weeklyGoalId = weeklyGoalId,
                     categoryId = category.id,
                     categoryName = category.name,
@@ -248,12 +285,84 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateTaskDetails(
+        task: DailyTask,
+        title: String,
+        notes: String,
+        category: CategoryItem,
+        priority: Int,
+        isEssential: Boolean,
+        weeklyGoalId: Long? = task.weeklyGoalId
+    ) {
+        val trimmedTitle = title.trim()
+        if (trimmedTitle.isBlank()) return
+        viewModelScope.launch {
+            val updated = task.copy(
+                title = trimmedTitle,
+                notes = notes.trim(),
+                categoryId = category.id,
+                categoryName = category.name,
+                categoryColor = category.colorHex,
+                priority = priority,
+                isEssential = isEssential,
+                weeklyGoalId = weeklyGoalId,
+                xpReward = if (task.isRoutine) task.xpReward else when (priority) { 3 -> 45; 2 -> 35; else -> 25 },
+                coinReward = if (task.isRoutine) task.coinReward else when (priority) { 3 -> 30; 2 -> 20; else -> 15 }
+            )
+            repository.updateTask(updated)
+            vibrationHelper.vibrateClick()
+            loadWeeklyReport()
+        }
+    }
+
+    fun moveTaskToDate(task: DailyTask, targetDate: String) {
+        if (task.date == targetDate) return
+        viewModelScope.launch {
+            val targetTasks = repository.getTasksForDateSync(targetDate)
+            val personalCount = targetTasks.count { !it.isRoutine && it.scheduledDayOfWeek == null }
+            if (!task.isRoutine && task.scheduledDayOfWeek == null && personalCount >= 5) {
+                _showMaxTaskLimitDialog.value = true
+                return@launch
+            }
+            if (targetTasks.any { it.title.trim().equals(task.title.trim(), ignoreCase = true) }) {
+                repository.deleteTask(task)
+            } else {
+                repository.updateTask(
+                    task.copy(
+                        date = targetDate,
+                        isMovedFromPreviousDay = targetDate == todayDateString && task.date < todayDateString
+                    )
+                )
+            }
+            vibrationHelper.vibrateClick()
+            loadWeeklyReport()
+        }
+    }
+
     fun deleteTask(task: DailyTask) {
         viewModelScope.launch {
             repository.deleteTask(task)
             vibrationHelper.vibrateClick()
             loadWeeklyReport()
         }
+    }
+
+    suspend fun completeTaskInRitual(task: DailyTask): Pair<Int, Int> {
+        if (task.isCompleted) return Pair(0, 0)
+        val result = repository.toggleTaskCompletion(task)
+        soundManager.playGentleRitualCompleteSound()
+        vibrationHelper.vibrateSuccess()
+        loadWeeklyReport()
+        return if (result != null) {
+            Pair(result.xpGained, result.coinsGained)
+        } else {
+            Pair(0, 0)
+        }
+    }
+
+    fun playGentleRitualCompleteSound() {
+        soundManager.playGentleRitualCompleteSound()
+        vibrationHelper.vibrateSuccess()
     }
 
     fun addWeeklyGoal(title: String, targetCount: Int, category: CategoryItem) {
@@ -564,28 +673,15 @@ class RiseViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addTomorrowTask(title: String, category: CategoryItem, priority: Int = 2) {
-        if (title.isBlank()) return
-        val tomorrow = repository.getTomorrowString()
-        viewModelScope.launch {
-            repository.insertTask(
-                DailyTask(
-                    title = title.trim(),
-                    notes = "Planned the night before",
-                    date = tomorrow,
-                    categoryId = category.id,
-                    categoryName = category.name,
-                    categoryColor = category.colorHex,
-                    priority = priority,
-                    isRoutine = false,
-                    isEssential = false,
-                    xpReward = when (priority) { 3 -> 45; 2 -> 35; else -> 25 },
-                    coinReward = when (priority) { 3 -> 30; 2 -> 20; else -> 15 }
-                )
-            )
-            soundManager.playCoinSpendSound()
-            vibrationHelper.vibrateClick()
-            // Do NOT regenerate automatically when task changes to protect daily free quota
-        }
+        addTaskForDate(
+            date = repository.getTomorrowString(),
+            title = title,
+            notes = "Planned the night before",
+            weeklyGoalId = null,
+            category = category,
+            priority = priority,
+            isEssential = false
+        )
     }
 
     fun updateUserName(name: String) {
