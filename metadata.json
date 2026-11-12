@@ -1,0 +1,6 @@
+{
+  "name": "Rise",
+  "description": "Gamified daily and weekly goal app with morning full-screen alarm, Text-to-Speech briefing, XP, streaks, and real-life rewards shop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

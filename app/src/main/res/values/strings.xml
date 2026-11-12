@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Rise</string>
+    <string name="alarm_channel_name">Morning Alarm</string>
+    <string name="alarm_channel_description">Rise full-screen morning wake-up alarm</string>
+    <string name="evening_channel_name">Evening Check-in</string>
+    <string name="evening_channel_description">Rise daily reflection and planning reminder</string>
+</resources>
